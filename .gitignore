@@ -1,0 +1,22 @@
+# Dependencies
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+backend/target/
+
+# Generated Pyodide assets (npm run dev/build)
+frontend/public/pyodide/
+
+# Runtime data (SQLite + saved projects)
+data/*
+!data/.gitkeep
+
+# Environment
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

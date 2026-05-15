@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      SANDBOX_BIND: 0.0.0.0:8080
+      SANDBOX_DATA_DIR: /app/data
+      SANDBOX_DB_PATH: /app/data/sandbox.db
+      SANDBOX_USERNAME: ${SANDBOX_USERNAME:-parent}
+      SANDBOX_PASSWORD: ${SANDBOX_PASSWORD:-change-me}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${SANDBOX_HTTP_PORT:-8090}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
