@@ -23,6 +23,7 @@ pub(crate) struct PublicUser {
     pub(crate) id: String,
     pub(crate) username: String,
     pub(crate) display_name: String,
+    pub(crate) role: String,
 }
 
 pub(crate) struct UserWithHash {
@@ -30,6 +31,7 @@ pub(crate) struct UserWithHash {
     pub(crate) username: String,
     pub(crate) password_hash: String,
     pub(crate) display_name: String,
+    pub(crate) role: String,
 }
 
 impl UserWithHash {
@@ -38,6 +40,7 @@ impl UserWithHash {
             id: self.id,
             username: self.username,
             display_name: self.display_name,
+            role: self.role,
         }
     }
 }
@@ -75,6 +78,8 @@ pub(crate) struct LessonSummary {
     pub(crate) id: String,
     pub(crate) title: String,
     pub(crate) prompt: String,
+    pub(crate) description: String,
+    pub(crate) difficulty: String,
 }
 
 #[derive(Serialize)]
@@ -82,6 +87,9 @@ pub(crate) struct LessonDetail {
     pub(crate) id: String,
     pub(crate) title: String,
     pub(crate) prompt: String,
+    pub(crate) description: String,
+    pub(crate) hint: String,
+    pub(crate) difficulty: String,
     pub(crate) starter_code: String,
     pub(crate) expected_stdout: String,
 }

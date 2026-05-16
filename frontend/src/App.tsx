@@ -35,6 +35,8 @@ type LessonResult = {
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loginError, setLoginError] = useState('');
+  const [loginUsername, setLoginUsername] = useState('son');
+  const [loginPassword, setLoginPassword] = useState('python');
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -152,22 +154,32 @@ export function App() {
     return worker;
   }, [appendConsole, stopWorker]);
 
-  const loadWorkspace = useCallback(async () => {
-    const [projectList, lessonList] = await Promise.all([api.listProjects(), api.listLessons()]);
-    setProjects(projectList);
+  const loadWorkspace = useCallback(async (currentUser: User) => {
+    const lessonList = await api.listLessons();
     setLessons(lessonList);
+    if (lessonList.length > 0) {
+      const firstLesson = await api.getLesson(lessonList[0].id);
+      setLesson(firstLesson);
+      setCode(firstLesson.starter_code);
+    }
+
+    if (currentUser.role === 'child') {
+      setProjects([]);
+      setProject(null);
+      return;
+    }
+
+    const projectList = await api.listProjects();
+    setProjects(projectList);
     if (projectList.length > 0) {
       const detail = await api.getProject(projectList[0].id);
       setProject(detail);
-      setCode(detail.files['main.py'] ?? '');
+      setCode(detail.files['main.py'] ?? lessonList[0]?.prompt ?? 'print("hello, python")\n');
     } else {
       const created = await api.createProject('First Project');
       setProject(created);
       setCode(created.files['main.py'] ?? '');
       setProjects(await api.listProjects());
-    }
-    if (lessonList.length > 0) {
-      setLesson(await api.getLesson(lessonList[0].id));
     }
   }, []);
 
@@ -176,7 +188,7 @@ export function App() {
       .me()
       .then(async ({ user }) => {
         setUser(user);
-        await loadWorkspace();
+        await loadWorkspace(user);
       })
       .catch(() => {
         setUser(null);
@@ -193,7 +205,7 @@ export function App() {
     try {
       const { user } = await api.login(String(form.get('username')), String(form.get('password')));
       setUser(user);
-      await loadWorkspace();
+      await loadWorkspace(user);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Login failed');
     }
@@ -206,6 +218,12 @@ export function App() {
     setProjects([]);
     setLessons([]);
     setLesson(null);
+  }
+
+  function chooseLogin(username: string, password: string) {
+    setLoginUsername(username);
+    setLoginPassword(password);
+    setLoginError('');
   }
 
   async function createProject() {
@@ -286,13 +304,23 @@ export function App() {
             <h1>Python Sandbox</h1>
             <p>Home coding space</p>
           </div>
+          <div className="login-choices">
+            <button type="button" className={loginUsername === 'son' ? 'login-choice active' : 'login-choice'} onClick={() => chooseLogin('son', 'python')}>
+              <span>Young Coder</span>
+              <small>Lessons and code</small>
+            </button>
+            <button type="button" className={loginUsername === 'parent' ? 'login-choice active' : 'login-choice'} onClick={() => chooseLogin('parent', 'change-me')}>
+              <span>Parent</span>
+              <small>Projects and progress</small>
+            </button>
+          </div>
           <label>
             Username
-            <input name="username" defaultValue="parent" autoComplete="username" />
+            <input name="username" value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} autoComplete="username" />
           </label>
           <label>
             Password
-            <input name="password" type="password" autoComplete="current-password" />
+            <input name="password" type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" />
           </label>
           {loginError ? <p className="error-text">{loginError}</p> : null}
           <button type="submit">Sign in</button>
@@ -308,30 +336,32 @@ export function App() {
           <FileCode2 size={24} />
           <div>
             <h1>Python Sandbox</h1>
-            <p>{user.display_name}</p>
+            <p>{user.display_name} · {user.role === 'child' ? 'Learner' : 'Parent'}</p>
           </div>
         </div>
 
-        <section className="sidebar-section">
-          <div className="section-title">
-            <span>Projects</span>
-            <button className="icon-button" type="button" onClick={createProject} aria-label="New project">
-              <Plus size={16} />
-            </button>
-          </div>
-          <div className="list">
-            {projects.map((item) => (
-              <button
-                className={item.id === project?.id ? 'list-item active' : 'list-item'}
-                type="button"
-                key={item.id}
-                onClick={() => void selectProject(item.id)}
-              >
-                {item.title}
+        {user.role === 'parent' ? (
+          <section className="sidebar-section">
+            <div className="section-title">
+              <span>Projects</span>
+              <button className="icon-button" type="button" onClick={createProject} aria-label="New project">
+                <Plus size={16} />
               </button>
-            ))}
-          </div>
-        </section>
+            </div>
+            <div className="list">
+              {projects.map((item) => (
+                <button
+                  className={item.id === project?.id ? 'list-item active' : 'list-item'}
+                  type="button"
+                  key={item.id}
+                  onClick={() => void selectProject(item.id)}
+                >
+                  {item.title}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="sidebar-section">
           <div className="section-title">
@@ -346,7 +376,8 @@ export function App() {
                 key={item.id}
                 onClick={() => void selectLesson(item.id)}
               >
-                {item.title}
+                <span>{item.title}</span>
+                <small>{item.difficulty}</small>
               </button>
             ))}
           </div>
@@ -361,7 +392,7 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <h2>{project?.title ?? 'Untitled Project'}</h2>
+            <h2>{user.role === 'child' ? lesson?.title ?? 'Lesson' : project?.title ?? 'Untitled Project'}</h2>
             <p>{lesson ? lesson.prompt : 'Write Python and run it safely in your browser.'}</p>
           </div>
           <div className="toolbar">
@@ -377,10 +408,12 @@ export function App() {
               <RotateCcw size={16} />
               Reset
             </button>
-            <button type="button" onClick={() => void saveProject()} disabled={!project || saveState === 'saving'}>
-              <Save size={16} />
-              {saveState === 'saved' ? 'Saved' : 'Save'}
-            </button>
+            {user.role === 'parent' ? (
+              <button type="button" onClick={() => void saveProject()} disabled={!project || saveState === 'saving'}>
+                <Save size={16} />
+                {saveState === 'saved' ? 'Saved' : 'Save'}
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -402,6 +435,15 @@ export function App() {
           </section>
 
           <aside className="right-pane">
+            {lesson ? (
+              <section className="problem-panel">
+                <div className="pane-title">Problem</div>
+                <h3>{lesson.title}</h3>
+                <p>{lesson.description}</p>
+                {lesson.hint ? <p className="hint">Hint: {lesson.hint}</p> : null}
+              </section>
+            ) : null}
+
             <section className="console-panel">
               <div className="pane-title">
                 <span>

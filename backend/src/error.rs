@@ -22,6 +22,13 @@ impl ApiError {
         }
     }
 
+    pub(crate) fn forbidden(message: &str) -> Self {
+        Self::Http {
+            status: StatusCode::FORBIDDEN,
+            message: message.into(),
+        }
+    }
+
     pub(crate) fn not_found(message: &str) -> Self {
         Self::Http {
             status: StatusCode::NOT_FOUND,
