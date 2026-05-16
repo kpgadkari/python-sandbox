@@ -23,12 +23,16 @@ pub(crate) async fn list_lessons(
         .db
         .lock()
         .map_err(|_| ApiError::internal("database lock"))?;
-    let mut stmt = conn.prepare("SELECT id, title, prompt FROM lessons ORDER BY sort_order ASC")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, title, prompt, description, difficulty FROM lessons WHERE is_published = 1 ORDER BY sort_order ASC",
+    )?;
     let rows = stmt.query_map([], |row| {
         Ok(LessonSummary {
             id: row.get(0)?,
             title: row.get(1)?,
             prompt: row.get(2)?,
+            description: row.get(3)?,
+            difficulty: row.get(4)?,
         })
     })?;
     Ok(Json(rows.collect::<Result<Vec<_>, _>>()?))
@@ -46,15 +50,18 @@ pub(crate) async fn get_lesson(
         .map_err(|_| ApiError::internal("database lock"))?;
     let lesson = conn
         .query_row(
-            "SELECT id, title, prompt, starter_code, expected_stdout FROM lessons WHERE id = ?",
+            "SELECT id, title, prompt, description, hint, difficulty, starter_code, expected_stdout FROM lessons WHERE id = ? AND is_published = 1",
             [id],
             |row| {
                 Ok(LessonDetail {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     prompt: row.get(2)?,
-                    starter_code: row.get(3)?,
-                    expected_stdout: row.get(4)?,
+                    description: row.get(3)?,
+                    hint: row.get(4)?,
+                    difficulty: row.get(5)?,
+                    starter_code: row.get(6)?,
+                    expected_stdout: row.get(7)?,
                 })
             },
         )

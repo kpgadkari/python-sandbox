@@ -2,6 +2,7 @@ export type User = {
   id: string;
   username: string;
   display_name: string;
+  role: 'parent' | 'child';
 };
 
 export type ProjectSummary = {
@@ -19,9 +20,12 @@ export type LessonSummary = {
   id: string;
   title: string;
   prompt: string;
+  description: string;
+  difficulty: string;
 };
 
 export type LessonDetail = LessonSummary & {
+  hint: string;
   starter_code: string;
   expected_stdout: string;
 };

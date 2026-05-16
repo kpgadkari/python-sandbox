@@ -109,7 +109,11 @@ os.chdir("/home/pyodide/project")
   }
 }
 
-if (typeof self !== 'undefined' && 'postMessage' in self) {
+if (
+  typeof self !== 'undefined' &&
+  typeof WorkerGlobalScope !== 'undefined' &&
+  self instanceof WorkerGlobalScope
+) {
   getPyodide()
     .then(() => post({ type: 'ready' }))
     .catch((error) => console.error(error));

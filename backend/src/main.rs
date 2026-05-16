@@ -19,7 +19,7 @@ mod routes;
 mod state;
 
 use crate::{
-    db::{init_db, seed_lessons, seed_user},
+    db::{init_db, seed_lessons, seed_users},
     routes::build_router,
     state::AppState,
 };
@@ -39,7 +39,7 @@ async fn main() -> anyhow::Result<()> {
     );
     let connection = Connection::open(db_path).context("open sqlite database")?;
     init_db(&connection)?;
-    seed_user(&connection)?;
+    seed_users(&connection)?;
     seed_lessons(&connection)?;
 
     let state = AppState {

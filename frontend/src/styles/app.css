@@ -108,6 +108,41 @@ button:disabled {
   font-weight: 800;
 }
 
+.login-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.login-choice {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-height: 72px;
+  border: 1px solid #cfd8dc;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbfb;
+  color: #172026;
+  text-align: left;
+}
+
+.login-choice.active {
+  border-color: #126a72;
+  background: #e8f4f3;
+}
+
+.login-choice span,
+.list-item span {
+  font-weight: 900;
+}
+
+.login-choice small,
+.list-item small {
+  color: #71818a;
+  font-size: 12px;
+}
+
 .error-text {
   color: #a32d2d;
   font-weight: 700;
@@ -187,6 +222,12 @@ button:disabled {
   padding: 8px 10px;
   color: #dde8ec;
   background: transparent;
+}
+
+.list-item small {
+  display: block;
+  color: #9fb0b8;
+  margin-top: 2px;
 }
 
 .list-item.active,
@@ -278,7 +319,7 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(220px, 1fr) auto auto;
+  grid-template-rows: auto minmax(220px, 1fr) auto auto;
   gap: 14px;
 }
 
@@ -286,6 +327,31 @@ button:disabled {
   min-height: 0;
   display: grid;
   grid-template-rows: 42px minmax(0, 1fr);
+}
+
+.problem-panel {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.problem-panel h3,
+.problem-panel p {
+  margin: 0 12px;
+}
+
+.problem-panel h3 {
+  font-size: 18px;
+}
+
+.problem-panel p {
+  color: #40515a;
+  line-height: 1.45;
+}
+
+.problem-panel .hint {
+  color: #7c5d1c;
+  font-weight: 800;
 }
 
 .console-output {

@@ -31,7 +31,7 @@ pub(crate) async fn login(
         .map_err(|_| ApiError::internal("database lock"))?;
     let user = conn
         .query_row(
-            "SELECT id, username, password_hash, display_name FROM users WHERE username = ?",
+            "SELECT id, username, password_hash, display_name, role FROM users WHERE username = ?",
             [&request.username],
             |row| {
                 Ok(UserWithHash {
@@ -39,6 +39,7 @@ pub(crate) async fn login(
                     username: row.get(1)?,
                     password_hash: row.get(2)?,
                     display_name: row.get(3)?,
+                    role: row.get(4)?,
                 })
             },
         )
@@ -124,7 +125,7 @@ pub(crate) fn require_user(state: &AppState, headers: &HeaderMap) -> Result<Publ
         .lock()
         .map_err(|_| ApiError::internal("database lock"))?;
     conn.query_row(
-        "SELECT users.id, users.username, users.display_name
+        "SELECT users.id, users.username, users.display_name, users.role
          FROM sessions JOIN users ON users.id = sessions.user_id
          WHERE sessions.token = ? AND sessions.expires_at > ?",
         params![token, Utc::now().to_rfc3339()],
@@ -133,6 +134,7 @@ pub(crate) fn require_user(state: &AppState, headers: &HeaderMap) -> Result<Publ
                 id: row.get(0)?,
                 username: row.get(1)?,
                 display_name: row.get(2)?,
+                role: row.get(3)?,
             })
         },
     )

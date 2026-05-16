@@ -1,0 +1,2 @@
+[alias]
+coverage = "llvm-cov --fail-under-lines 80 --summary-only"

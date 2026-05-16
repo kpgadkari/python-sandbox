@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     auth::require_user,
     error::ApiError,
-    models::{CreateProjectRequest, ProjectDetail, ProjectSummary, SaveFilesRequest},
+    models::{CreateProjectRequest, ProjectDetail, ProjectSummary, PublicUser, SaveFilesRequest},
     project_files::{read_project_files, validate_files, write_project_files},
     state::AppState,
 };
@@ -22,6 +22,7 @@ pub(crate) async fn list_projects(
     headers: HeaderMap,
 ) -> Result<Json<Vec<ProjectSummary>>, ApiError> {
     let user = require_user(&state, &headers)?;
+    require_parent(&user)?;
     let conn = state
         .db
         .lock()
@@ -46,6 +47,7 @@ pub(crate) async fn create_project(
     Json(request): Json<CreateProjectRequest>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
     let user = require_user(&state, &headers)?;
+    require_parent(&user)?;
     let project_id = Uuid::new_v4().to_string();
     let title = clean_title(request.title);
     let now = Utc::now().to_rfc3339();
@@ -83,6 +85,7 @@ pub(crate) async fn get_project(
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
     let user = require_user(&state, &headers)?;
+    require_parent(&user)?;
     let summary = project_for_owner(&state, &id, &user.id)?;
     let files = read_project_files(&state.data_dir, &id)?;
     Ok(Json(ProjectDetail {
@@ -101,6 +104,7 @@ pub(crate) async fn save_project_files(
     Json(request): Json<SaveFilesRequest>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
     let user = require_user(&state, &headers)?;
+    require_parent(&user)?;
     let mut summary = project_for_owner(&state, &id, &user.id)?;
     validate_files(&request.files)?;
     write_project_files(&state.data_dir, &id, &request.files)?;
@@ -131,6 +135,7 @@ pub(crate) async fn delete_project(
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
     let user = require_user(&state, &headers)?;
+    require_parent(&user)?;
     project_for_owner(&state, &id, &user.id)?;
     let conn = state
         .db
@@ -168,6 +173,14 @@ fn project_for_owner(
     )
     .optional()?
     .ok_or(ApiError::not_found("project not found"))
+}
+
+fn require_parent(user: &PublicUser) -> Result<(), ApiError> {
+    if user.role == "parent" {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden("projects require parent access"))
+    }
 }
 
 fn clean_title(title: Option<String>) -> String {
