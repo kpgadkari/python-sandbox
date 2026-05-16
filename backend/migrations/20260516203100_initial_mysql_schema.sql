@@ -1,17 +1,17 @@
 CREATE TABLE users (
     id CHAR(36) PRIMARY KEY,
-    username VARCHAR(191) NOT NULL UNIQUE,
+    username VARCHAR(191) NOT NULL COLLATE utf8mb4_0900_as_cs UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(191) NOT NULL,
     role VARCHAR(32) NOT NULL DEFAULT 'parent',
-    created_at VARCHAR(40) NOT NULL
+    created_at DATETIME(6) NOT NULL
 );
 
 CREATE TABLE sessions (
-    token CHAR(64) PRIMARY KEY,
+    token CHAR(64) COLLATE utf8mb4_0900_as_cs PRIMARY KEY,
     user_id CHAR(36) NOT NULL,
-    created_at VARCHAR(40) NOT NULL,
-    expires_at VARCHAR(40) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    expires_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_sessions_user
         FOREIGN KEY (user_id) REFERENCES users(id)
         ON DELETE CASCADE
@@ -24,8 +24,8 @@ CREATE TABLE projects (
     id CHAR(36) PRIMARY KEY,
     owner_id CHAR(36) NOT NULL,
     title VARCHAR(255) NOT NULL,
-    created_at VARCHAR(40) NOT NULL,
-    updated_at VARCHAR(40) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_projects_owner
         FOREIGN KEY (owner_id) REFERENCES users(id)
         ON DELETE CASCADE
@@ -55,7 +55,7 @@ CREATE TABLE attempts (
     code_snapshot MEDIUMTEXT NOT NULL,
     stdout MEDIUMTEXT NOT NULL,
     passed BOOLEAN NOT NULL,
-    created_at VARCHAR(40) NOT NULL,
+    created_at DATETIME(6) NOT NULL,
     CONSTRAINT fk_attempts_user
         FOREIGN KEY (user_id) REFERENCES users(id)
         ON DELETE CASCADE,

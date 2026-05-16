@@ -23,7 +23,12 @@ pub(crate) async fn list_projects(
     let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
     let rows = sqlx::query_as::<_, ProjectSummary>(
-        "SELECT id, title, created_at, updated_at FROM projects WHERE owner_id = ? ORDER BY updated_at DESC",
+        "SELECT id, title,
+                DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at
+         FROM projects
+         WHERE owner_id = ?
+         ORDER BY updated_at DESC",
     )
     .bind(user.id)
     .fetch_all(&state.db)
@@ -40,7 +45,9 @@ pub(crate) async fn create_project(
     require_parent(&user)?;
     let project_id = Uuid::new_v4().to_string();
     let title = clean_title(request.title);
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now();
+    let now_db = now.naive_utc();
+    let now_response = now.to_rfc3339();
     let mut files = HashMap::new();
     files.insert(
         "main.py".to_string(),
@@ -57,16 +64,16 @@ pub(crate) async fn create_project(
     .bind(&project_id)
     .bind(&user.id)
     .bind(&title)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_db)
+    .bind(now_db)
     .execute(&state.db)
     .await?;
 
     Ok(Json(ProjectDetail {
         id: project_id,
         title,
-        created_at: now.clone(),
-        updated_at: now,
+        created_at: now_response.clone(),
+        updated_at: now_response,
         files,
     }))
 }
@@ -101,14 +108,15 @@ pub(crate) async fn save_project_files(
     validate_files(&request.files)?;
     write_project_files(&state.data_dir, &id, &request.files)?;
 
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now();
+    let now_response = now.to_rfc3339();
     sqlx::query("UPDATE projects SET updated_at = ? WHERE id = ? AND owner_id = ?")
-        .bind(&now)
+        .bind(now.naive_utc())
         .bind(&id)
         .bind(&user.id)
         .execute(&state.db)
         .await?;
-    summary.updated_at = now;
+    summary.updated_at = now_response;
 
     Ok(Json(ProjectDetail {
         id: summary.id,
@@ -143,7 +151,11 @@ async fn project_for_owner(
     owner_id: &str,
 ) -> Result<ProjectSummary, ApiError> {
     sqlx::query_as::<_, ProjectSummary>(
-        "SELECT id, title, created_at, updated_at FROM projects WHERE id = ? AND owner_id = ?",
+        "SELECT id, title,
+                DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at
+         FROM projects
+         WHERE id = ? AND owner_id = ?",
     )
     .bind(project_id)
     .bind(owner_id)

@@ -63,7 +63,7 @@ async fn seed_user(
     .bind(password_hash)
     .bind(display_name)
     .bind(role)
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now().naive_utc())
     .execute(pool)
     .await?;
     Ok(())
@@ -199,16 +199,16 @@ pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
                 id, title, prompt, description, hint, difficulty, starter_code,
                 expected_stdout, hidden_tests, is_published, sort_order
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?) AS new
              ON DUPLICATE KEY UPDATE
-                title = VALUES(title),
-                prompt = VALUES(prompt),
-                description = VALUES(description),
-                hint = VALUES(hint),
-                difficulty = VALUES(difficulty),
-                starter_code = VALUES(starter_code),
-                expected_stdout = VALUES(expected_stdout),
-                sort_order = VALUES(sort_order),
+                title = new.title,
+                prompt = new.prompt,
+                description = new.description,
+                hint = new.hint,
+                difficulty = new.difficulty,
+                starter_code = new.starter_code,
+                expected_stdout = new.expected_stdout,
+                sort_order = new.sort_order,
                 is_published = TRUE",
         )
         .bind(lesson.0)
@@ -229,28 +229,24 @@ pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_db::TestDb;
 
     #[tokio::test]
     async fn seeds_default_lessons_once() -> anyhow::Result<()> {
-        let database_url = match env::var("SANDBOX_TEST_DATABASE_URL") {
-            Ok(value) => value,
-            Err(_) => return Ok(()),
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(());
         };
-        let pool = MySqlPool::connect(&database_url).await?;
-        sqlx::migrate!("./migrations").run(&pool).await?;
-        sqlx::query("DELETE FROM attempts").execute(&pool).await?;
-        sqlx::query("DELETE FROM lessons").execute(&pool).await?;
 
-        seed_lessons(&pool).await?;
-        seed_lessons(&pool).await?;
+        seed_lessons(&db.pool).await?;
+        seed_lessons(&db.pool).await?;
 
         let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM lessons")
-            .fetch_one(&pool)
+            .fetch_one(&db.pool)
             .await?;
         let first_title = sqlx::query_scalar::<_, String>(
             "SELECT title FROM lessons ORDER BY sort_order ASC LIMIT 1",
         )
-        .fetch_one(&pool)
+        .fetch_one(&db.pool)
         .await?;
         assert_eq!(count, 12);
         assert_eq!(first_title, "Hello, Python");

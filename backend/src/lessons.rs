@@ -66,7 +66,7 @@ pub(crate) async fn check_lesson(
     .bind(request.code_snapshot)
     .bind(request.stdout)
     .bind(passed)
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now().naive_utc())
     .execute(&state.db)
     .await?;
     Ok(Json(CheckLessonResponse {

@@ -48,8 +48,8 @@ pub(crate) async fn login(
     )
     .bind(&token)
     .bind(&user.id)
-    .bind(now.to_rfc3339())
-    .bind(expires.to_rfc3339())
+    .bind(now.naive_utc())
+    .bind(expires.naive_utc())
     .execute(&state.db)
     .await?;
 
@@ -119,7 +119,7 @@ pub(crate) async fn require_user(
          WHERE sessions.token = ? AND sessions.expires_at > ?",
     )
     .bind(token)
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now().naive_utc())
     .fetch_optional(&state.db)
     .await?
     .ok_or(ApiError::unauthorized())

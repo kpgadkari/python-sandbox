@@ -19,6 +19,9 @@ brew install just
 just --list
 ```
 
+Copy `.env.example` to `.env` and adjust passwords/ports as needed before
+running the Docker stack.
+
 Backend:
 
 ```sh

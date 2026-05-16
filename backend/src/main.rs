@@ -12,6 +12,8 @@ mod project_files;
 mod projects;
 mod routes;
 mod state;
+#[cfg(test)]
+mod test_db;
 
 use crate::{
     db::{seed_lessons, seed_users},

@@ -36,59 +36,36 @@ async fn health() -> Result<Json<HealthResponse>, ApiError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, sync::Arc};
-
     use axum::{
         body::{to_bytes, Body},
         http::{header, Method, Request, StatusCode},
     };
     use serde_json::{json, Value};
-    use sqlx::MySqlPool;
     use tempfile::TempDir;
-    use tokio::sync::{Mutex, OwnedMutexGuard};
     use tower::ServiceExt;
 
     use super::*;
     use crate::{
         db::{seed_lessons, seed_users},
         state::AppState,
+        test_db::TestDb,
     };
 
-    static TEST_DB_LOCK: std::sync::OnceLock<Arc<Mutex<()>>> = std::sync::OnceLock::new();
-
-    async fn test_state() -> anyhow::Result<Option<(AppState, TempDir, OwnedMutexGuard<()>)>> {
-        let database_url = match env::var("SANDBOX_TEST_DATABASE_URL") {
-            Ok(value) => value,
-            Err(_) => return Ok(None),
+    async fn test_state() -> anyhow::Result<Option<(AppState, TempDir, TestDb)>> {
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(None);
         };
-        let guard = TEST_DB_LOCK
-            .get_or_init(|| Arc::new(Mutex::new(())))
-            .clone()
-            .lock_owned()
-            .await;
         let temp_dir = tempfile::tempdir()?;
-        let pool = MySqlPool::connect(&database_url).await?;
-        sqlx::migrate!("./migrations").run(&pool).await?;
-        reset_database(&pool).await?;
-        seed_users(&pool).await?;
-        seed_lessons(&pool).await?;
+        seed_users(&db.pool).await?;
+        seed_lessons(&db.pool).await?;
         Ok(Some((
             AppState {
-                db: pool,
+                db: db.pool.clone(),
                 data_dir: temp_dir.path().to_path_buf(),
             },
             temp_dir,
-            guard,
+            db,
         )))
-    }
-
-    async fn reset_database(pool: &MySqlPool) -> anyhow::Result<()> {
-        sqlx::query("DELETE FROM attempts").execute(pool).await?;
-        sqlx::query("DELETE FROM sessions").execute(pool).await?;
-        sqlx::query("DELETE FROM projects").execute(pool).await?;
-        sqlx::query("DELETE FROM lessons").execute(pool).await?;
-        sqlx::query("DELETE FROM users").execute(pool).await?;
-        Ok(())
     }
 
     async fn json_body(response: axum::response::Response) -> anyhow::Result<Value> {
@@ -119,7 +96,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_returns_child_role_and_rejects_bad_password() -> anyhow::Result<()> {
-        let Some((state, _temp_dir, _guard)) = test_state().await? else {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
             return Ok(());
         };
         let app = build_router(state);
@@ -158,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn lesson_routes_return_rich_lessons_and_record_attempts() -> anyhow::Result<()> {
-        let Some((state, _temp_dir, _guard)) = test_state().await? else {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
             return Ok(());
         };
         let app = build_router(state.clone());
@@ -229,7 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_routes_create_update_get_and_delete_owned_projects() -> anyhow::Result<()> {
-        let Some((state, _temp_dir, _guard)) = test_state().await? else {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
             return Ok(());
         };
         let app = build_router(state);
@@ -299,7 +276,7 @@ mod tests {
 
     #[tokio::test]
     async fn project_routes_require_parent_role() -> anyhow::Result<()> {
-        let Some((state, _temp_dir, _guard)) = test_state().await? else {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
             return Ok(());
         };
         let app = build_router(state);
