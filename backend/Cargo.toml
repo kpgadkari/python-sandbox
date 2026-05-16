@@ -10,9 +10,9 @@ axum = "0.7"
 chrono = { version = "0.4", features = ["serde"] }
 cookie = "0.18"
 rand = "0.8"
-rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "mysql", "migrate", "macros"] }
 thiserror = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }

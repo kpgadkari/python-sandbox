@@ -4,7 +4,6 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use rusqlite::{params, OptionalExtension};
 use uuid::Uuid;
 
 use crate::{
@@ -18,24 +17,13 @@ pub(crate) async fn list_lessons(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<LessonSummary>>, ApiError> {
-    require_user(&state, &headers)?;
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    let mut stmt = conn.prepare(
+    require_user(&state, &headers).await?;
+    let rows = sqlx::query_as::<_, LessonSummary>(
         "SELECT id, title, prompt, description, difficulty FROM lessons WHERE is_published = 1 ORDER BY sort_order ASC",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(LessonSummary {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            prompt: row.get(2)?,
-            description: row.get(3)?,
-            difficulty: row.get(4)?,
-        })
-    })?;
-    Ok(Json(rows.collect::<Result<Vec<_>, _>>()?))
+    )
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows))
 }
 
 pub(crate) async fn get_lesson(
@@ -43,29 +31,13 @@ pub(crate) async fn get_lesson(
     headers: HeaderMap,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<LessonDetail>, ApiError> {
-    require_user(&state, &headers)?;
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    let lesson = conn
-        .query_row(
+    require_user(&state, &headers).await?;
+    let lesson = sqlx::query_as::<_, LessonDetail>(
             "SELECT id, title, prompt, description, hint, difficulty, starter_code, expected_stdout FROM lessons WHERE id = ? AND is_published = 1",
-            [id],
-            |row| {
-                Ok(LessonDetail {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    prompt: row.get(2)?,
-                    description: row.get(3)?,
-                    hint: row.get(4)?,
-                    difficulty: row.get(5)?,
-                    starter_code: row.get(6)?,
-                    expected_stdout: row.get(7)?,
-                })
-            },
         )
-        .optional()?
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await?
         .ok_or(ApiError::not_found("lesson not found"))?;
     Ok(Json(lesson))
 }
@@ -76,33 +48,27 @@ pub(crate) async fn check_lesson(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<CheckLessonRequest>,
 ) -> Result<Json<CheckLessonResponse>, ApiError> {
-    let user = require_user(&state, &headers)?;
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    let expected: String = conn
-        .query_row(
-            "SELECT expected_stdout FROM lessons WHERE id = ?",
-            [&id],
-            |row| row.get(0),
-        )
-        .optional()?
-        .ok_or(ApiError::not_found("lesson not found"))?;
+    let user = require_user(&state, &headers).await?;
+    let expected =
+        sqlx::query_scalar::<_, String>("SELECT expected_stdout FROM lessons WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await?
+            .ok_or(ApiError::not_found("lesson not found"))?;
     let passed = normalize_stdout(&request.stdout) == normalize_stdout(&expected);
-    conn.execute(
+    sqlx::query(
         "INSERT INTO attempts (id, user_id, lesson_id, code_snapshot, stdout, passed, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
-        params![
-            Uuid::new_v4().to_string(),
-            user.id,
-            id,
-            request.code_snapshot,
-            request.stdout,
-            if passed { 1 } else { 0 },
-            Utc::now().to_rfc3339()
-        ],
-    )?;
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(user.id)
+    .bind(id)
+    .bind(request.code_snapshot)
+    .bind(request.stdout)
+    .bind(passed)
+    .bind(Utc::now().to_rfc3339())
+    .execute(&state.db)
+    .await?;
     Ok(Json(CheckLessonResponse {
         passed,
         expected_stdout: expected,

@@ -6,137 +6,46 @@ use argon2::{
 };
 use chrono::Utc;
 use rand::rngs::OsRng;
-use rusqlite::{params, Connection, OptionalExtension};
+use sqlx::MySqlPool;
 use uuid::Uuid;
 
-pub(crate) fn init_db(conn: &Connection) -> anyhow::Result<()> {
-    conn.execute_batch(
-        r#"
-        PRAGMA foreign_keys = ON;
-
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            username TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            display_name TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'parent',
-            created_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS sessions (
-            token TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS projects (
-            id TEXT PRIMARY KEY,
-            owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            title TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS lessons (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            prompt TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            hint TEXT NOT NULL DEFAULT '',
-            difficulty TEXT NOT NULL DEFAULT 'Beginner',
-            starter_code TEXT NOT NULL,
-            expected_stdout TEXT NOT NULL,
-            hidden_tests TEXT NOT NULL DEFAULT '[]',
-            is_published INTEGER NOT NULL DEFAULT 1,
-            sort_order INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS attempts (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
-            code_snapshot TEXT NOT NULL,
-            stdout TEXT NOT NULL,
-            passed INTEGER NOT NULL,
-            created_at TEXT NOT NULL
-        );
-        "#,
-    )?;
-    add_column_if_missing(conn, "users", "role", "TEXT NOT NULL DEFAULT 'parent'")?;
-    add_column_if_missing(conn, "lessons", "description", "TEXT NOT NULL DEFAULT ''")?;
-    add_column_if_missing(conn, "lessons", "hint", "TEXT NOT NULL DEFAULT ''")?;
-    add_column_if_missing(
-        conn,
-        "lessons",
-        "difficulty",
-        "TEXT NOT NULL DEFAULT 'Beginner'",
-    )?;
-    add_column_if_missing(
-        conn,
-        "lessons",
-        "is_published",
-        "INTEGER NOT NULL DEFAULT 1",
-    )?;
-    Ok(())
-}
-
-fn add_column_if_missing(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-    definition: &str,
-) -> anyhow::Result<()> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
-    let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
-    for existing in columns {
-        if existing? == column {
-            return Ok(());
-        }
-    }
-    conn.execute(
-        &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
-        [],
-    )?;
-    Ok(())
-}
-
-pub(crate) fn seed_users(conn: &Connection) -> anyhow::Result<()> {
+pub(crate) async fn seed_users(pool: &MySqlPool) -> anyhow::Result<()> {
     seed_user(
-        conn,
+        pool,
         &env::var("SANDBOX_USERNAME").unwrap_or_else(|_| "parent".into()),
         &env::var("SANDBOX_PASSWORD").unwrap_or_else(|_| "change-me".into()),
         &env::var("SANDBOX_DISPLAY_NAME").unwrap_or_else(|_| "Parent".into()),
         "parent",
-    )?;
+    )
+    .await?;
     seed_user(
-        conn,
+        pool,
         &env::var("SANDBOX_CHILD_USERNAME").unwrap_or_else(|_| "son".into()),
         &env::var("SANDBOX_CHILD_PASSWORD").unwrap_or_else(|_| "python".into()),
         &env::var("SANDBOX_CHILD_DISPLAY_NAME").unwrap_or_else(|_| "Young Coder".into()),
         "child",
     )
+    .await
 }
 
-fn seed_user(
-    conn: &Connection,
+async fn seed_user(
+    pool: &MySqlPool,
     username: &str,
     password: &str,
     display_name: &str,
     role: &str,
 ) -> anyhow::Result<()> {
-    let exists: Option<String> = conn
-        .query_row(
-            "SELECT id FROM users WHERE username = ?",
-            [username],
-            |row| row.get(0),
-        )
-        .optional()?;
+    let exists = sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE username = ?")
+        .bind(username)
+        .fetch_optional(pool)
+        .await?;
     if let Some(id) = exists {
-        conn.execute(
-            "UPDATE users SET display_name = ?, role = ? WHERE id = ?",
-            params![display_name, role, id],
-        )?;
+        sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
+            .bind(display_name)
+            .bind(role)
+            .bind(id)
+            .execute(pool)
+            .await?;
         return Ok(());
     }
 
@@ -145,14 +54,22 @@ fn seed_user(
         .hash_password(password.as_bytes(), &salt)
         .map_err(|err| anyhow::anyhow!("hash password: {err}"))?
         .to_string();
-    conn.execute(
-        "INSERT INTO users (id, username, password_hash, display_name, role, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        params![Uuid::new_v4().to_string(), username, password_hash, display_name, role, Utc::now().to_rfc3339()],
-    )?;
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, display_name, role, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(username)
+    .bind(password_hash)
+    .bind(display_name)
+    .bind(role)
+    .bind(Utc::now().to_rfc3339())
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
-pub(crate) fn seed_lessons(conn: &Connection) -> anyhow::Result<()> {
+pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
     let lessons = [
         (
             "hello-python",
@@ -277,15 +194,34 @@ pub(crate) fn seed_lessons(conn: &Connection) -> anyhow::Result<()> {
     ];
 
     for (index, lesson) in lessons.iter().enumerate() {
-        conn.execute(
-            "INSERT OR IGNORE INTO lessons (id, title, prompt, description, hint, difficulty, starter_code, expected_stdout, hidden_tests, is_published, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 1, ?)",
-            params![lesson.0, lesson.1, lesson.2, lesson.3, lesson.4, lesson.5, lesson.6, lesson.7, index as i64],
-        )?;
-        conn.execute(
-            "UPDATE lessons SET title = ?, prompt = ?, description = ?, hint = ?, difficulty = ?, starter_code = ?, expected_stdout = ?, sort_order = ?, is_published = 1 WHERE id = ?",
-            params![lesson.1, lesson.2, lesson.3, lesson.4, lesson.5, lesson.6, lesson.7, index as i64, lesson.0],
-        )?;
+        sqlx::query(
+            "INSERT INTO lessons (
+                id, title, prompt, description, hint, difficulty, starter_code,
+                expected_stdout, hidden_tests, is_published, sort_order
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?)
+             ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                prompt = VALUES(prompt),
+                description = VALUES(description),
+                hint = VALUES(hint),
+                difficulty = VALUES(difficulty),
+                starter_code = VALUES(starter_code),
+                expected_stdout = VALUES(expected_stdout),
+                sort_order = VALUES(sort_order),
+                is_published = TRUE",
+        )
+        .bind(lesson.0)
+        .bind(lesson.1)
+        .bind(lesson.2)
+        .bind(lesson.3)
+        .bind(lesson.4)
+        .bind(lesson.5)
+        .bind(lesson.6)
+        .bind(lesson.7)
+        .bind(index as i32)
+        .execute(pool)
+        .await?;
     }
     Ok(())
 }
@@ -294,20 +230,28 @@ pub(crate) fn seed_lessons(conn: &Connection) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn seeds_default_lessons_once() -> anyhow::Result<()> {
-        let conn = Connection::open_in_memory()?;
-        init_db(&conn)?;
+    #[tokio::test]
+    async fn seeds_default_lessons_once() -> anyhow::Result<()> {
+        let database_url = match env::var("SANDBOX_TEST_DATABASE_URL") {
+            Ok(value) => value,
+            Err(_) => return Ok(()),
+        };
+        let pool = MySqlPool::connect(&database_url).await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        sqlx::query("DELETE FROM attempts").execute(&pool).await?;
+        sqlx::query("DELETE FROM lessons").execute(&pool).await?;
 
-        seed_lessons(&conn)?;
-        seed_lessons(&conn)?;
+        seed_lessons(&pool).await?;
+        seed_lessons(&pool).await?;
 
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM lessons", [], |row| row.get(0))?;
-        let first_title: String = conn.query_row(
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM lessons")
+            .fetch_one(&pool)
+            .await?;
+        let first_title = sqlx::query_scalar::<_, String>(
             "SELECT title FROM lessons ORDER BY sort_order ASC LIMIT 1",
-            [],
-            |row| row.get(0),
-        )?;
+        )
+        .fetch_one(&pool)
+        .await?;
         assert_eq!(count, 12);
         assert_eq!(first_title, "Hello, Python");
         Ok(())

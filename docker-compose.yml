@@ -1,15 +1,36 @@
 services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: python_sandbox
+      MYSQL_USER: sandbox
+      MYSQL_PASSWORD: ${SANDBOX_MYSQL_PASSWORD:-sandbox}
+      MYSQL_ROOT_PASSWORD: ${SANDBOX_MYSQL_ROOT_PASSWORD:-sandbox-root}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:${SANDBOX_MYSQL_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
     environment:
       SANDBOX_BIND: 0.0.0.0:8080
       SANDBOX_DATA_DIR: /app/data
-      SANDBOX_DB_PATH: /app/data/sandbox.db
+      DATABASE_URL: mysql://sandbox:${SANDBOX_MYSQL_PASSWORD:-sandbox}@mysql:3306/python_sandbox
       SANDBOX_USERNAME: ${SANDBOX_USERNAME:-parent}
       SANDBOX_PASSWORD: ${SANDBOX_PASSWORD:-change-me}
     volumes:
       - ./data:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -20,3 +41,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  mysql-data:
