@@ -12,22 +12,37 @@ fileserver, but Python code runs in the browser through Pyodide/WebAssembly.
 
 ## Local Development
 
+Install [`just`](https://just.systems/) to run common tasks from the repository root:
+
+```sh
+brew install just
+just --list
+```
+
 Backend:
 
 ```sh
-cd backend
-cargo run
+just backend-dev
 ```
 
 Frontend:
 
 ```sh
-cd frontend
 npm install
-npm run dev
+just frontend-dev
 ```
 
 The frontend dev server proxies `/api` to `http://localhost:8080`.
+
+Useful recipes:
+
+```sh
+just test          # frontend + backend tests
+just coverage      # frontend + backend coverage checks
+just build         # frontend bundle + backend release binary
+just docker-build  # Docker images for both services
+just up            # start the Docker Compose stack
+```
 
 Default login:
 
