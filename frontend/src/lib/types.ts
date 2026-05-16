@@ -36,6 +36,7 @@ export type RunRequest = {
 
 export type WorkerEvent =
   | { type: 'ready' }
+  | { type: 'started'; runId: string }
   | { type: 'stdout'; runId: string; text: string }
   | { type: 'stderr'; runId: string; text: string }
   | { type: 'input_request'; runId: string; prompt: string }

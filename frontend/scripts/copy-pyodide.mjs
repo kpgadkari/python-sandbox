@@ -10,5 +10,4 @@ await mkdir(target, { recursive: true });
 await cp(source, target, {
   recursive: true,
   force: true,
-  filter: (path) => !path.includes('/node_modules/'),
 });

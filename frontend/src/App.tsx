@@ -93,6 +93,14 @@ export function App() {
         setWorkerReady(true);
         return;
       }
+      if (event.type === 'started') {
+        if (timeoutRef.current) {
+          window.clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = window.setTimeout(() => stopWorker('timeout'), RUN_TIMEOUT_MS);
+        setRunState('running');
+        return;
+      }
       if (event.type === 'stdout' || event.type === 'stderr') {
         outputBytesRef.current += event.text.length;
         if (outputBytesRef.current > MAX_OUTPUT_BYTES) {
@@ -247,7 +255,6 @@ export function App() {
     setConsoleLines([]);
     setRunState(workerReady ? 'running' : 'loading');
 
-    timeoutRef.current = window.setTimeout(() => stopWorker('timeout'), RUN_TIMEOUT_MS);
     worker.postMessage({
       type: 'run',
       runId,
@@ -255,7 +262,6 @@ export function App() {
       entrypoint: 'main.py',
       stdin: stdin.length > 0 ? stdin.split('\n') : [],
     });
-    setRunState('running');
   }
 
   function resetCode() {

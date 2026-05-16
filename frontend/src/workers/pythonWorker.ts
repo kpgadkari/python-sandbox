@@ -12,11 +12,26 @@ type PyodideInterface = {
   setStderr(options: { batched: (text: string) => void }): void;
 };
 
-declare const loadPyodide: (options?: { indexURL?: string }) => Promise<PyodideInterface>;
+type PyodideModule = {
+  loadPyodide: (options?: { indexURL?: string }) => Promise<PyodideInterface>;
+};
 
 const PYODIDE_INDEX_URL = '/pyodide/';
+const PYODIDE_MODULE_URL = `${PYODIDE_INDEX_URL}pyodide.mjs?v=0.29.4`;
 
 let pyodideReady: Promise<PyodideInterface> | null = null;
+
+export function projectFileTarget(path: string) {
+  const normalized = path.replace(/\\/g, '/');
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length === 0 || parts.some((part) => part === '..')) {
+    throw new Error(`Invalid project path: ${path}`);
+  }
+  return {
+    normalized,
+    directory: parts.length > 1 ? parts.slice(0, -1).join('/') : null,
+  };
+}
 
 function post(event: WorkerEvent) {
   self.postMessage(event);
@@ -24,45 +39,47 @@ function post(event: WorkerEvent) {
 
 async function getPyodide() {
   if (!pyodideReady) {
-    self.importScripts(`${PYODIDE_INDEX_URL}pyodide.js`);
-    pyodideReady = loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+    pyodideReady = import(/* @vite-ignore */ PYODIDE_MODULE_URL).then((module) =>
+      (module as PyodideModule).loadPyodide({ indexURL: PYODIDE_INDEX_URL }),
+    ).catch((error) => {
+      pyodideReady = null;
+      throw error;
+    });
   }
   return pyodideReady;
 }
 
 async function runPython(request: RunRequest) {
   const started = performance.now();
-  const pyodide = await getPyodide();
   const stdin = [...(request.stdin ?? [])];
 
-  pyodide.setStdout({
-    batched: (text: string) => post({ type: 'stdout', runId: request.runId, text: `${text}\n` }),
-  });
-  pyodide.setStderr({
-    batched: (text: string) => post({ type: 'stderr', runId: request.runId, text: `${text}\n` }),
-  });
-  pyodide.setStdin({
-    stdin: () => {
-      if (stdin.length === 0) {
-        post({ type: 'input_request', runId: request.runId, prompt: '' });
-        throw new Error('Input required. Add input text and run again.');
-      }
-      return `${stdin.shift() ?? ''}\n`;
-    },
-  });
-
   try {
+    const pyodide = await getPyodide();
+    post({ type: 'started', runId: request.runId });
+
+    pyodide.setStdout({
+      batched: (text: string) => post({ type: 'stdout', runId: request.runId, text: `${text}\n` }),
+    });
+    pyodide.setStderr({
+      batched: (text: string) => post({ type: 'stderr', runId: request.runId, text: `${text}\n` }),
+    });
+    pyodide.setStdin({
+      stdin: () => {
+        if (stdin.length === 0) {
+          post({ type: 'input_request', runId: request.runId, prompt: '' });
+          throw new Error('Input required. Add input text and run again.');
+        }
+        return `${stdin.shift() ?? ''}\n`;
+      },
+    });
+
     pyodide.FS.mkdirTree('/home/pyodide/project');
     for (const [path, contents] of Object.entries(request.files)) {
-      const normalized = path.replace(/\\/g, '/');
-      const parts = normalized.split('/').filter(Boolean);
-      if (parts.some((part) => part === '..')) {
-        throw new Error(`Invalid project path: ${path}`);
+      const target = projectFileTarget(path);
+      if (target.directory) {
+        pyodide.FS.mkdirTree(`/home/pyodide/project/${target.directory}`);
       }
-      if (parts.length > 1) {
-        pyodide.FS.mkdirTree(`/home/pyodide/project/${parts.slice(0, -1).join('/')}`);
-      }
-      pyodide.FS.writeFile(`/home/pyodide/project/${normalized}`, contents);
+      pyodide.FS.writeFile(`/home/pyodide/project/${target.normalized}`, contents);
     }
 
     pyodide.runPython(`
@@ -92,10 +109,14 @@ os.chdir("/home/pyodide/project")
   }
 }
 
-getPyodide().then(() => post({ type: 'ready' }));
+if (typeof self !== 'undefined' && 'postMessage' in self) {
+  getPyodide()
+    .then(() => post({ type: 'ready' }))
+    .catch((error) => console.error(error));
 
-self.onmessage = (message: MessageEvent<RunRequest>) => {
-  if (message.data.type === 'run') {
-    void runPython(message.data);
-  }
-};
+  self.onmessage = (message: MessageEvent<RunRequest>) => {
+    if (message.data.type === 'run') {
+      void runPython(message.data);
+    }
+  };
+}

@@ -3,6 +3,7 @@ frontend/node_modules/
 
 # Build outputs
 frontend/dist/
+frontend/coverage/
 backend/target/
 
 # Generated Pyodide assets (npm run dev/build)
@@ -11,6 +12,7 @@ frontend/public/pyodide/
 # Runtime data (SQLite + saved projects)
 data/*
 !data/.gitkeep
+backend/data/*
 
 # Environment
 .env
