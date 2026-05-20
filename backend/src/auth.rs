@@ -24,10 +24,11 @@ pub(crate) async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Response, ApiError> {
+    let username = request.username.trim().to_lowercase();
     let user = sqlx::query_as::<_, UserWithHash>(
         "SELECT id, username, password_hash, display_name, role FROM users WHERE username = ?",
     )
-    .bind(&request.username)
+    .bind(username)
     .fetch_optional(&state.db)
     .await?
     .ok_or(ApiError::unauthorized())?;

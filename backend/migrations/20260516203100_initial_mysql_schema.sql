@@ -1,6 +1,6 @@
 CREATE TABLE users (
     id CHAR(36) PRIMARY KEY,
-    username VARCHAR(191) NOT NULL COLLATE utf8mb4_0900_as_cs UNIQUE,
+    username VARCHAR(191) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(191) NOT NULL,
     role VARCHAR(32) NOT NULL DEFAULT 'parent',
@@ -8,7 +8,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE sessions (
-    token CHAR(64) COLLATE utf8mb4_0900_as_cs PRIMARY KEY,
+    token CHAR(64) PRIMARY KEY,
     user_id CHAR(36) NOT NULL,
     created_at DATETIME(6) NOT NULL,
     expires_at DATETIME(6) NOT NULL,

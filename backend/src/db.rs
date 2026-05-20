@@ -35,8 +35,9 @@ async fn seed_user(
     display_name: &str,
     role: &str,
 ) -> anyhow::Result<()> {
+    let username = username.trim().to_lowercase();
     let exists = sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE username = ?")
-        .bind(username)
+        .bind(&username)
         .fetch_optional(pool)
         .await?;
     if let Some(id) = exists {
@@ -199,19 +200,27 @@ pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
                 id, title, prompt, description, hint, difficulty, starter_code,
                 expected_stdout, hidden_tests, is_published, sort_order
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?) AS new
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?)
              ON DUPLICATE KEY UPDATE
-                title = new.title,
-                prompt = new.prompt,
-                description = new.description,
-                hint = new.hint,
-                difficulty = new.difficulty,
-                starter_code = new.starter_code,
-                expected_stdout = new.expected_stdout,
-                sort_order = new.sort_order,
+                title = ?,
+                prompt = ?,
+                description = ?,
+                hint = ?,
+                difficulty = ?,
+                starter_code = ?,
+                expected_stdout = ?,
+                sort_order = ?,
                 is_published = TRUE",
         )
         .bind(lesson.0)
+        .bind(lesson.1)
+        .bind(lesson.2)
+        .bind(lesson.3)
+        .bind(lesson.4)
+        .bind(lesson.5)
+        .bind(lesson.6)
+        .bind(lesson.7)
+        .bind(index as i32)
         .bind(lesson.1)
         .bind(lesson.2)
         .bind(lesson.3)

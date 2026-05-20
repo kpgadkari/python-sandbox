@@ -58,6 +58,10 @@ Back up both persistent data locations:
 Use `mysqldump` or your OMV backup tooling for the MySQL data. The old
 SQLite `sandbox.db` file is no longer used by the app.
 
+If you already run MariaDB on the file server, create a database/user there and
+set `DATABASE_URL` to that MariaDB connection string instead of using the
+bundled MySQL service.
+
 ## 5. Security Notes
 
 - The server does not execute submitted Python in this MVP.
