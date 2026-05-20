@@ -19,14 +19,18 @@ down:
 logs:
     docker compose logs -f
 
-# Start only MySQL for backend development and integration tests.
-mysql:
-    docker compose up -d mysql
+# Start only MariaDB for backend development and integration tests.
+mariadb:
+    docker compose up -d mariadb
 
-# Run the backend locally against the Compose MySQL service.
+# Backward-compatible alias for the old MySQL recipe name.
+mysql:
+    @just mariadb
+
+# Run the backend locally against the Compose MariaDB service.
 backend-dev:
-    docker compose up -d mysql
-    DATABASE_URL="${DATABASE_URL:-mysql://sandbox:${SANDBOX_MYSQL_PASSWORD:-sandbox}@127.0.0.1:${SANDBOX_MYSQL_PORT:-3306}/python_sandbox}" cargo run --manifest-path backend/Cargo.toml
+    docker compose up -d mariadb
+    DATABASE_URL="${DATABASE_URL:-mysql://sandbox:${SANDBOX_MARIADB_PASSWORD:-${SANDBOX_MYSQL_PASSWORD:-sandbox}}@127.0.0.1:${SANDBOX_MARIADB_PORT:-${SANDBOX_MYSQL_PORT:-3306}}/python_sandbox}" cargo run --manifest-path backend/Cargo.toml
 
 # Run the frontend dev server.
 frontend-dev:
@@ -37,10 +41,10 @@ test:
     cargo test --manifest-path backend/Cargo.toml
     npm --prefix frontend test
 
-# Run backend tests against the Compose MySQL service.
+# Run backend tests against the Compose MariaDB service.
 test-db:
-    docker compose up -d mysql
-    SANDBOX_TEST_DATABASE_URL="${SANDBOX_TEST_DATABASE_URL:-mysql://sandbox:${SANDBOX_MYSQL_PASSWORD:-sandbox}@127.0.0.1:${SANDBOX_MYSQL_PORT:-3306}/python_sandbox}" cargo test --manifest-path backend/Cargo.toml
+    docker compose up -d mariadb
+    SANDBOX_TEST_DATABASE_URL="${SANDBOX_TEST_DATABASE_URL:-mysql://sandbox:${SANDBOX_MARIADB_PASSWORD:-${SANDBOX_MYSQL_PASSWORD:-sandbox}}@127.0.0.1:${SANDBOX_MARIADB_PORT:-${SANDBOX_MYSQL_PORT:-3306}}/python_sandbox}" cargo test --manifest-path backend/Cargo.toml
 
 # Run frontend coverage and backend tests.
 coverage:

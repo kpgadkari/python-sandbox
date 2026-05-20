@@ -200,7 +200,7 @@ pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
                 id, title, prompt, description, hint, difficulty, starter_code,
                 expected_stdout, hidden_tests, is_published, sort_order
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 1, ?)
              ON DUPLICATE KEY UPDATE
                 title = ?,
                 prompt = ?,
@@ -210,7 +210,7 @@ pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
                 starter_code = ?,
                 expected_stdout = ?,
                 sort_order = ?,
-                is_published = TRUE",
+                is_published = 1",
         )
         .bind(lesson.0)
         .bind(lesson.1)

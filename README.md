@@ -7,7 +7,7 @@ fileserver, but Python code runs in the browser through Pyodide/WebAssembly.
 
 - Frontend: React, Vite, TypeScript, CodeMirror 6
 - Runtime: Pyodide in a Web Worker
-- Backend: Rust, Axum, MySQL-compatible database
+- Backend: Rust, Axum, MariaDB (MySQL-compatible protocol)
 - Deployment: Docker Compose
 
 ## Local Development
@@ -55,15 +55,14 @@ Default login:
 
 Override these with `SANDBOX_USERNAME` and `SANDBOX_PASSWORD`.
 
-The Docker Compose stack includes MySQL. For local backend-only development,
-start a compatible MySQL instance and set `DATABASE_URL` before running the
-backend. Compose publishes MySQL on `127.0.0.1:${SANDBOX_MYSQL_PORT:-3306}` for
-local development and integration tests.
-
-MariaDB is also supported when you provide a MariaDB `DATABASE_URL`.
+The Docker Compose stack includes MariaDB. For local backend-only development,
+start the database with `just mariadb` or point `DATABASE_URL` at another
+MariaDB/MySQL-compatible server. Compose publishes MariaDB on
+`127.0.0.1:${SANDBOX_MARIADB_PORT:-3306}` for local development and integration
+tests.
 
 Set `SANDBOX_TEST_DATABASE_URL` to run backend database integration tests against
-a disposable MySQL database.
+a disposable MariaDB database.
 
 ## OMV Deployment
 

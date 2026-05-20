@@ -23,7 +23,7 @@ impl TestDb {
             .await;
         let pool = MySqlPool::connect(&database_url)
             .await
-            .context("connect to test mysql database")?;
+            .context("connect to test mariadb database")?;
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
@@ -43,17 +43,19 @@ fn test_database_url() -> anyhow::Result<Option<String>> {
             anyhow::bail!("SANDBOX_TEST_DATABASE_URL must be set in CI")
         }
         Err(_) => {
-            eprintln!("skipping MySQL integration test; set SANDBOX_TEST_DATABASE_URL to run it");
+            eprintln!("skipping MariaDB integration test; set SANDBOX_TEST_DATABASE_URL to run it");
             Ok(None)
         }
     }
 }
 
 async fn reset_database(pool: &MySqlPool) -> anyhow::Result<()> {
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 0").execute(pool).await?;
     sqlx::query("DELETE FROM attempts").execute(pool).await?;
     sqlx::query("DELETE FROM sessions").execute(pool).await?;
     sqlx::query("DELETE FROM projects").execute(pool).await?;
     sqlx::query("DELETE FROM lessons").execute(pool).await?;
     sqlx::query("DELETE FROM users").execute(pool).await?;
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 1").execute(pool).await?;
     Ok(())
 }

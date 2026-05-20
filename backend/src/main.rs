@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
         .max_connections(5)
         .connect(&database_url)
         .await
-        .context("connect to mysql database")?;
+        .context("connect to mariadb database")?;
     sqlx::migrate!("./migrations")
         .run(&pool)
         .await
