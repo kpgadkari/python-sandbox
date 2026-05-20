@@ -9,7 +9,7 @@ backend/target/
 # Generated Pyodide assets (npm run dev/build)
 frontend/public/pyodide/
 
-# Runtime data (SQLite + saved projects)
+# Runtime data (saved projects)
 data/*
 !data/.gitkeep
 backend/data/*
@@ -17,6 +17,7 @@ backend/data/*
 # Environment
 .env
 .env.*
+!.env.example
 
 # OS / editor
 .DS_Store

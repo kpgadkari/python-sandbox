@@ -22,6 +22,9 @@ Copy `.env.example` to `.env` and set a password:
 ```sh
 SANDBOX_USERNAME=parent
 SANDBOX_PASSWORD=choose-a-real-password
+SANDBOX_MARIADB_PASSWORD=choose-a-database-password
+SANDBOX_MARIADB_ROOT_PASSWORD=choose-a-root-database-password
+SANDBOX_MARIADB_PORT=3306
 SANDBOX_HTTP_PORT=8090
 ```
 
@@ -47,10 +50,17 @@ http://YOUR-OMV-LAN-IP:8090
 
 ## 4. Backups
 
-Back up the app data folder. It contains:
+Back up both persistent data locations:
 
-- `sandbox.db`: users, sessions, projects, lessons, attempts
-- `projects/`: saved project files
+- The MariaDB `mariadb-data` volume: users, sessions, projects, lessons, attempts
+- The app data folder's `projects/` directory: saved project files
+
+Use `mariadb-dump` or your OMV backup tooling for the database data. The old
+SQLite `sandbox.db` file is no longer used by the app.
+
+If you already run MariaDB on the file server, create a database/user there and
+set `DATABASE_URL` to that connection string instead of using the bundled
+MariaDB service.
 
 ## 5. Security Notes
 

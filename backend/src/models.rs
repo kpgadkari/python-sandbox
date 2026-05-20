@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
 #[derive(Serialize)]
 pub(crate) struct HealthResponse {
@@ -18,7 +19,7 @@ pub(crate) struct MeResponse {
     pub(crate) user: PublicUser,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, FromRow, Serialize)]
 pub(crate) struct PublicUser {
     pub(crate) id: String,
     pub(crate) username: String,
@@ -26,6 +27,7 @@ pub(crate) struct PublicUser {
     pub(crate) role: String,
 }
 
+#[derive(FromRow)]
 pub(crate) struct UserWithHash {
     pub(crate) id: String,
     pub(crate) username: String,
@@ -45,7 +47,7 @@ impl UserWithHash {
     }
 }
 
-#[derive(Serialize)]
+#[derive(FromRow, Serialize)]
 pub(crate) struct ProjectSummary {
     pub(crate) id: String,
     pub(crate) title: String,
@@ -73,7 +75,7 @@ pub(crate) struct SaveFilesRequest {
     pub(crate) files: HashMap<String, String>,
 }
 
-#[derive(Serialize)]
+#[derive(FromRow, Serialize)]
 pub(crate) struct LessonSummary {
     pub(crate) id: String,
     pub(crate) title: String,
@@ -82,7 +84,7 @@ pub(crate) struct LessonSummary {
     pub(crate) difficulty: String,
 }
 
-#[derive(Serialize)]
+#[derive(FromRow, Serialize)]
 pub(crate) struct LessonDetail {
     pub(crate) id: String,
     pub(crate) title: String,

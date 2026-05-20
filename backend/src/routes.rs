@@ -36,36 +36,36 @@ async fn health() -> Result<Json<HealthResponse>, ApiError> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
     use axum::{
         body::{to_bytes, Body},
         http::{header, Method, Request, StatusCode},
     };
-    use rusqlite::Connection;
     use serde_json::{json, Value};
     use tempfile::TempDir;
     use tower::ServiceExt;
 
     use super::*;
     use crate::{
-        db::{init_db, seed_lessons, seed_users},
+        db::{seed_lessons, seed_users},
         state::AppState,
+        test_db::TestDb,
     };
 
-    fn test_state() -> anyhow::Result<(AppState, TempDir)> {
+    async fn test_state() -> anyhow::Result<Option<(AppState, TempDir, TestDb)>> {
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(None);
+        };
         let temp_dir = tempfile::tempdir()?;
-        let conn = Connection::open_in_memory()?;
-        init_db(&conn)?;
-        seed_users(&conn)?;
-        seed_lessons(&conn)?;
-        Ok((
+        seed_users(&db.pool).await?;
+        seed_lessons(&db.pool).await?;
+        Ok(Some((
             AppState {
-                db: Arc::new(Mutex::new(conn)),
+                db: db.pool.clone(),
                 data_dir: temp_dir.path().to_path_buf(),
             },
             temp_dir,
-        ))
+            db,
+        )))
     }
 
     async fn json_body(response: axum::response::Response) -> anyhow::Result<Value> {
@@ -96,7 +96,9 @@ mod tests {
 
     #[tokio::test]
     async fn login_returns_child_role_and_rejects_bad_password() -> anyhow::Result<()> {
-        let (state, _temp_dir) = test_state()?;
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
         let app = build_router(state);
 
         let response = app
@@ -133,7 +135,9 @@ mod tests {
 
     #[tokio::test]
     async fn lesson_routes_return_rich_lessons_and_record_attempts() -> anyhow::Result<()> {
-        let (state, _temp_dir) = test_state()?;
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
         let app = build_router(state.clone());
         let cookie = login_cookie(app.clone(), "son", "python").await?;
 
@@ -193,19 +197,18 @@ mod tests {
         let check = json_body(check_response).await?;
         assert_eq!(check["passed"], true);
 
-        let attempts: i64 =
-            state
-                .db
-                .lock()
-                .unwrap()
-                .query_row("SELECT COUNT(*) FROM attempts", [], |row| row.get(0))?;
+        let attempts = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM attempts")
+            .fetch_one(&state.db)
+            .await?;
         assert_eq!(attempts, 1);
         Ok(())
     }
 
     #[tokio::test]
     async fn project_routes_create_update_get_and_delete_owned_projects() -> anyhow::Result<()> {
-        let (state, _temp_dir) = test_state()?;
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
         let app = build_router(state);
         let cookie = login_cookie(app.clone(), "parent", "change-me").await?;
 
@@ -273,7 +276,9 @@ mod tests {
 
     #[tokio::test]
     async fn project_routes_require_parent_role() -> anyhow::Result<()> {
-        let (state, _temp_dir) = test_state()?;
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
         let app = build_router(state);
         let child_cookie = login_cookie(app.clone(), "son", "python").await?;
 

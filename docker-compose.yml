@@ -1,15 +1,37 @@
 services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: python_sandbox
+      MARIADB_USER: sandbox
+      MARIADB_PASSWORD: ${SANDBOX_MARIADB_PASSWORD:-${SANDBOX_MYSQL_PASSWORD:-sandbox}}
+      MARIADB_ROOT_PASSWORD: ${SANDBOX_MARIADB_ROOT_PASSWORD:-${SANDBOX_MYSQL_ROOT_PASSWORD:-sandbox-root}}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:${SANDBOX_MARIADB_PORT:-${SANDBOX_MYSQL_PORT:-3306}}:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
     environment:
       SANDBOX_BIND: 0.0.0.0:8080
       SANDBOX_DATA_DIR: /app/data
-      SANDBOX_DB_PATH: /app/data/sandbox.db
+      DATABASE_URL: mysql://sandbox:${SANDBOX_MARIADB_PASSWORD:-${SANDBOX_MYSQL_PASSWORD:-sandbox}}@mariadb:3306/python_sandbox
       SANDBOX_USERNAME: ${SANDBOX_USERNAME:-parent}
       SANDBOX_PASSWORD: ${SANDBOX_PASSWORD:-change-me}
     volumes:
       - ./data:/app/data
+    depends_on:
+      mariadb:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -20,3 +42,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  mariadb-data:

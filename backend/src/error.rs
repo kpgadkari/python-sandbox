@@ -11,7 +11,7 @@ pub(crate) enum ApiError {
     #[error("{message}")]
     Http { status: StatusCode, message: String },
     #[error(transparent)]
-    Sql(#[from] rusqlite::Error),
+    Database(#[from] sqlx::Error),
 }
 
 impl ApiError {
@@ -57,7 +57,7 @@ impl IntoResponse for ApiError {
             ApiError::Http { status, message } => {
                 (status, Json(ErrorResponse { error: message })).into_response()
             }
-            ApiError::Sql(err) => {
+            ApiError::Database(err) => {
                 tracing::error!("database error: {err}");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,

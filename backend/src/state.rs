@@ -1,12 +1,9 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::path::PathBuf;
 
-use rusqlite::Connection;
+use sqlx::MySqlPool;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
-    pub(crate) db: Arc<Mutex<Connection>>,
+    pub(crate) db: MySqlPool,
     pub(crate) data_dir: PathBuf,
 }

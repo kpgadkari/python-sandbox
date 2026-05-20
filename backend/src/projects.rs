@@ -6,7 +6,6 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use rusqlite::{params, OptionalExtension};
 use uuid::Uuid;
 
 use crate::{
@@ -21,24 +20,20 @@ pub(crate) async fn list_projects(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ProjectSummary>>, ApiError> {
-    let user = require_user(&state, &headers)?;
+    let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    let mut stmt = conn.prepare(
-        "SELECT id, title, created_at, updated_at FROM projects WHERE owner_id = ? ORDER BY updated_at DESC",
-    )?;
-    let rows = stmt.query_map([user.id], |row| {
-        Ok(ProjectSummary {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            created_at: row.get(2)?,
-            updated_at: row.get(3)?,
-        })
-    })?;
-    Ok(Json(rows.collect::<Result<Vec<_>, _>>()?))
+    let rows = sqlx::query_as::<_, ProjectSummary>(
+        "SELECT id, title,
+                DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at
+         FROM projects
+         WHERE owner_id = ?
+         ORDER BY updated_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(rows))
 }
 
 pub(crate) async fn create_project(
@@ -46,11 +41,13 @@ pub(crate) async fn create_project(
     headers: HeaderMap,
     Json(request): Json<CreateProjectRequest>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
-    let user = require_user(&state, &headers)?;
+    let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
     let project_id = Uuid::new_v4().to_string();
     let title = clean_title(request.title);
-    let now = Utc::now().to_rfc3339();
+    let now = Utc::now();
+    let now_db = now.naive_utc();
+    let now_response = now.to_rfc3339();
     let mut files = HashMap::new();
     files.insert(
         "main.py".to_string(),
@@ -61,20 +58,22 @@ pub(crate) async fn create_project(
     validate_files(&files)?;
     write_project_files(&state.data_dir, &project_id, &files)?;
 
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    conn.execute(
+    sqlx::query(
         "INSERT INTO projects (id, owner_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        params![&project_id, &user.id, &title, &now, &now],
-    )?;
+    )
+    .bind(&project_id)
+    .bind(&user.id)
+    .bind(&title)
+    .bind(now_db)
+    .bind(now_db)
+    .execute(&state.db)
+    .await?;
 
     Ok(Json(ProjectDetail {
         id: project_id,
         title,
-        created_at: now.clone(),
-        updated_at: now,
+        created_at: now_response.clone(),
+        updated_at: now_response,
         files,
     }))
 }
@@ -84,9 +83,9 @@ pub(crate) async fn get_project(
     headers: HeaderMap,
     AxumPath(id): AxumPath<String>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
-    let user = require_user(&state, &headers)?;
+    let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
-    let summary = project_for_owner(&state, &id, &user.id)?;
+    let summary = project_for_owner(&state, &id, &user.id).await?;
     let files = read_project_files(&state.data_dir, &id)?;
     Ok(Json(ProjectDetail {
         id: summary.id,
@@ -103,22 +102,21 @@ pub(crate) async fn save_project_files(
     AxumPath(id): AxumPath<String>,
     Json(request): Json<SaveFilesRequest>,
 ) -> Result<Json<ProjectDetail>, ApiError> {
-    let user = require_user(&state, &headers)?;
+    let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
-    let mut summary = project_for_owner(&state, &id, &user.id)?;
+    let mut summary = project_for_owner(&state, &id, &user.id).await?;
     validate_files(&request.files)?;
     write_project_files(&state.data_dir, &id, &request.files)?;
 
-    let now = Utc::now().to_rfc3339();
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    conn.execute(
-        "UPDATE projects SET updated_at = ? WHERE id = ? AND owner_id = ?",
-        params![&now, &id, &user.id],
-    )?;
-    summary.updated_at = now;
+    let now = Utc::now();
+    let now_response = now.to_rfc3339();
+    sqlx::query("UPDATE projects SET updated_at = ? WHERE id = ? AND owner_id = ?")
+        .bind(now.naive_utc())
+        .bind(&id)
+        .bind(&user.id)
+        .execute(&state.db)
+        .await?;
+    summary.updated_at = now_response;
 
     Ok(Json(ProjectDetail {
         id: summary.id,
@@ -134,44 +132,35 @@ pub(crate) async fn delete_project(
     headers: HeaderMap,
     AxumPath(id): AxumPath<String>,
 ) -> Result<StatusCode, ApiError> {
-    let user = require_user(&state, &headers)?;
+    let user = require_user(&state, &headers).await?;
     require_parent(&user)?;
-    project_for_owner(&state, &id, &user.id)?;
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    conn.execute(
-        "DELETE FROM projects WHERE id = ? AND owner_id = ?",
-        params![&id, &user.id],
-    )?;
+    project_for_owner(&state, &id, &user.id).await?;
+    sqlx::query("DELETE FROM projects WHERE id = ? AND owner_id = ?")
+        .bind(&id)
+        .bind(&user.id)
+        .execute(&state.db)
+        .await?;
     let project_dir = state.data_dir.join("projects").join(&id);
     let _ = fs::remove_dir_all(project_dir);
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn project_for_owner(
+async fn project_for_owner(
     state: &AppState,
     project_id: &str,
     owner_id: &str,
 ) -> Result<ProjectSummary, ApiError> {
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| ApiError::internal("database lock"))?;
-    conn.query_row(
-        "SELECT id, title, created_at, updated_at FROM projects WHERE id = ? AND owner_id = ?",
-        params![project_id, owner_id],
-        |row| {
-            Ok(ProjectSummary {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-            })
-        },
+    sqlx::query_as::<_, ProjectSummary>(
+        "SELECT id, title,
+                DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS updated_at
+         FROM projects
+         WHERE id = ? AND owner_id = ?",
     )
-    .optional()?
+    .bind(project_id)
+    .bind(owner_id)
+    .fetch_optional(&state.db)
+    .await?
     .ok_or(ApiError::not_found("project not found"))
 }
 
