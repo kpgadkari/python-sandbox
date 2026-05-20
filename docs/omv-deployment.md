@@ -1,71 +1,81 @@
 # OpenMediaVault Deployment
 
+One-command deploy on the NAS (or any Docker host with Compose):
+
+```sh
+git clone <repo-url> python-sandbox
+cd python-sandbox
+cp .env.example .env
+# Edit .env: passwords and SANDBOX_DATA_PATH (OMV shared folder)
+./deploy.sh
+```
+
+Open `http://<OMV-LAN-IP>:8090` (or the URL printed by `deploy.sh`).
+
 This app is intended for home LAN or VPN use. Do not expose it directly to the
 public internet without adding TLS, stronger auth, rate limiting, and backups.
 
-## 1. Create an App Data Folder
+## What `deploy.sh` does
 
-On OMV, create a shared folder dedicated to this app, for example:
+- Creates `.env` from `.env.example` if missing
+- Creates the app data directory (`SANDBOX_DATA_PATH`)
+- Runs `docker compose -f compose.yaml up -d --build`
+- Starts **MariaDB**, **backend**, and **frontend** with a one-shot **data-init**
+  container that fixes permissions on the data folder (UID 10001)
 
-```text
-/srv/dev-disk-by-uuid-XXXX/python-sandbox-data
-```
+## OMV shared folder
 
-Do not mount your media, family documents, backups, or other NAS shares into the
-app. The MVP runs Python in the browser, but the app data folder should still be
-treated as isolated application state.
-
-## 2. Configure Compose
-
-Copy `.env.example` to `.env` and set a password:
+1. In OMV: **Storage → Shared Folders** → create `python-sandbox-data`.
+2. In `.env` set the full path:
 
 ```sh
-SANDBOX_USERNAME=parent
+SANDBOX_DATA_PATH=/srv/dev-disk-by-uuid-XXXX/python-sandbox-data
 SANDBOX_PASSWORD=choose-a-real-password
 SANDBOX_MARIADB_PASSWORD=choose-a-database-password
 SANDBOX_MARIADB_ROOT_PASSWORD=choose-a-root-database-password
-SANDBOX_MARIADB_PORT=3306
-SANDBOX_HTTP_PORT=8090
 ```
 
-In `docker-compose.yml`, replace the local `./data` bind mount with your OMV
-folder if desired:
+Do not mount media libraries or backups into the app—only this dedicated folder.
 
-```yaml
-volumes:
-  - /srv/dev-disk-by-uuid-XXXX/python-sandbox-data:/app/data
-```
+## OMV Compose plugin
 
-## 3. Start
+1. Copy or clone this repository onto the NAS.
+2. Add a stack that points at `compose.yaml` in the repo root.
+3. Set the same variables from `.env` in the stack environment (or upload `.env`).
+4. Deploy the stack.
+
+Alternatively, SSH in and run `./deploy.sh` from the repo directory.
+
+## Manage the stack
 
 ```sh
-docker compose up -d --build
+docker compose -f compose.yaml logs -f
+docker compose -f compose.yaml ps
+docker compose -f compose.yaml down
+docker compose -f compose.yaml up -d --build   # rebuild after updates
 ```
 
-Then open:
+## Backups
 
-```text
-http://YOUR-OMV-LAN-IP:8090
+Back up both persistent locations:
+
+- Docker volume `mariadb-data` (or `python-sandbox_mariadb-data`): users, sessions,
+  projects metadata, lessons, attempts
+- `SANDBOX_DATA_PATH/projects/`: saved project files on disk
+
+```sh
+docker compose -f compose.yaml exec mariadb \
+  mariadb-dump -u sandbox -p"${SANDBOX_MARIADB_PASSWORD}" python_sandbox > backup.sql
 ```
 
-## 4. Backups
+## External MariaDB
 
-Back up both persistent data locations:
+If MariaDB already runs on OMV, remove the `mariadb` service from `compose.yaml`,
+point `DATABASE_URL` at your instance, and drop the `mariadb` dependency from
+`backend`.
 
-- The MariaDB `mariadb-data` volume: users, sessions, projects, lessons, attempts
-- The app data folder's `projects/` directory: saved project files
+## Security notes
 
-Use `mariadb-dump` or your OMV backup tooling for the database data. The old
-SQLite `sandbox.db` file is no longer used by the app.
-
-If you already run MariaDB on the file server, create a database/user there and
-set `DATABASE_URL` to that connection string instead of using the bundled
-MariaDB service.
-
-## 5. Security Notes
-
-- The server does not execute submitted Python in this MVP.
-- Python runs inside the browser using Pyodide.
-- Keep this app LAN-only unless you add production-grade hardening.
-- If server-side Python execution is added later, run it in a separate sandbox
-  service using gVisor or a VM, not directly on the OMV host.
+- Python runs in the browser (Pyodide); the server does not execute submitted code.
+- Keep the app LAN-only unless you add a reverse proxy, TLS, and hardening.
+- Use strong values for `SANDBOX_PASSWORD` and `SANDBOX_MARIADB_*`.

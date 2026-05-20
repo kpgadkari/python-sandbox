@@ -58,4 +58,8 @@ build:
 
 # Build Docker images for the full stack.
 docker-build:
-    docker compose build
+    docker compose -f compose.yaml build
+
+# Production-style deploy (creates .env if needed, starts stack in background).
+deploy:
+    ./deploy.sh

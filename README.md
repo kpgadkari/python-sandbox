@@ -64,6 +64,12 @@ tests.
 Set `SANDBOX_TEST_DATABASE_URL` to run backend database integration tests against
 a disposable MariaDB database.
 
-## OMV Deployment
+## Deploy (OMV or any Docker host)
 
-See [docs/omv-deployment.md](docs/omv-deployment.md).
+```sh
+cp .env.example .env   # set passwords and SANDBOX_DATA_PATH on OMV
+./deploy.sh
+```
+
+Starts MariaDB, backend, and frontend from a single `compose.yaml`. See
+[docs/omv-deployment.md](docs/omv-deployment.md).

@@ -1,4 +1,19 @@
+# Single-stack deploy: MariaDB + backend + frontend.
+# Local dev:  docker compose up --build
+# Production: ./deploy.sh  (or set SANDBOX_DATA_PATH in .env first)
+
 services:
+  data-init:
+    image: alpine:3.21
+    user: root
+    volumes:
+      - ${SANDBOX_DATA_PATH:-./data}:/data
+    command:
+      - sh
+      - -c
+      - mkdir -p /data/projects && chown -R 10001:10001 /data
+    restart: "no"
+
   mariadb:
     image: mariadb:11.4
     environment:
@@ -27,9 +42,15 @@ services:
       DATABASE_URL: mysql://sandbox:${SANDBOX_MARIADB_PASSWORD:-${SANDBOX_MYSQL_PASSWORD:-sandbox}}@mariadb:3306/python_sandbox
       SANDBOX_USERNAME: ${SANDBOX_USERNAME:-parent}
       SANDBOX_PASSWORD: ${SANDBOX_PASSWORD:-change-me}
+      SANDBOX_CHILD_USERNAME: ${SANDBOX_CHILD_USERNAME:-son}
+      SANDBOX_CHILD_PASSWORD: ${SANDBOX_CHILD_PASSWORD:-python}
+      SANDBOX_CHILD_DISPLAY_NAME: ${SANDBOX_CHILD_DISPLAY_NAME:-Young Coder}
+      SANDBOX_DISPLAY_NAME: ${SANDBOX_DISPLAY_NAME:-Parent}
     volumes:
-      - ./data:/app/data
+      - ${SANDBOX_DATA_PATH:-./data}:/app/data
     depends_on:
+      data-init:
+        condition: service_completed_successfully
       mariadb:
         condition: service_healthy
     restart: unless-stopped
