@@ -119,9 +119,9 @@ describe('pythonWorker runtime', () => {
 
     await nextTick();
 
-    const stdinProvider = pyodide.setStdin.mock.calls[0]?.[0]?.stdin as (() => string) | undefined;
-    expect(stdinProvider).toBeTypeOf('function');
-    expect(() => stdinProvider?.()).toThrow('Input required. Add input text and run again.');
+    expect(pyodide.setStdin).toHaveBeenCalledTimes(1);
+    const stdinProvider = pyodide.setStdin.mock.calls[0][0].stdin as () => string;
+    expect(() => stdinProvider()).toThrow('Input required. Add input text and run again.');
     expect(postMessage).toHaveBeenCalledWith({ type: 'input_request', runId: 'run-2', prompt: '' });
     expect(postMessage).toHaveBeenCalledWith({
       type: 'stderr',
