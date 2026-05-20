@@ -269,4 +269,73 @@ describe('App', () => {
     expect(worker?.terminated).toBe(true);
     expect(screen.getByText('Run stopped.')).toBeTruthy();
   });
+
+  it('creates a first project when parent has none and can switch projects', async () => {
+    const firstProject = {
+      ...project,
+      id: 'project-first',
+      title: 'First Project',
+      files: { 'main.py': 'print("bootstrapped")\n' },
+    };
+    const secondProject = {
+      ...project,
+      id: 'project-2',
+      title: 'Project 2',
+      files: { 'main.py': 'print("second")\n' },
+    };
+    vi.mocked(api.me).mockResolvedValue({ user: parentUser });
+    vi.mocked(api.logout).mockResolvedValue(undefined);
+    vi.mocked(api.listLessons).mockResolvedValue([lessonSummary]);
+    vi.mocked(api.getLesson).mockResolvedValue(lessonDetail);
+    vi.mocked(api.createProject).mockResolvedValue(firstProject);
+    vi.mocked(api.listProjects).mockResolvedValueOnce([]).mockResolvedValue([firstProject, secondProject]);
+    vi.mocked(api.getProject).mockImplementation(async (id) => (id === secondProject.id ? secondProject : firstProject));
+
+    render(<App />);
+
+    await waitFor(() => expect(api.createProject).toHaveBeenCalledWith('First Project'));
+    await waitFor(() => expect(screen.getByLabelText('code editor')).toHaveProperty('value', 'print("bootstrapped")\n'));
+    expect(await screen.findByRole('button', { name: 'Project 2' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Project 2' }));
+    await waitFor(() => expect(api.getProject).toHaveBeenCalledWith('project-2'));
+    await waitFor(() => expect(screen.getByLabelText('code editor')).toHaveProperty('value', 'print("second")\n'));
+  });
+
+  it('prevents duplicate runs while loading and reports worker crashes', async () => {
+    mockWorkspace(childUser);
+
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    const worker = MockWorker.latest;
+    expect(worker?.posted).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    expect(worker?.posted).toHaveLength(1);
+
+    act(() => {
+      worker?.onerror?.({ message: 'Worker crashed' } as ErrorEvent);
+    });
+    expect(screen.getByText('Worker crashed')).toBeTruthy();
+  });
+
+  it('shows a console message when lesson checks fail after a successful run', async () => {
+    mockWorkspace(childUser);
+    vi.mocked(api.checkLesson).mockRejectedValue(new Error('checker offline'));
+
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    const worker = MockWorker.latest;
+
+    act(() => {
+      worker?.emit({ type: 'started', runId: 'run-1' });
+      worker?.emit({ type: 'stdout', runId: 'run-1', text: 'hello, python\n' });
+      worker?.emit({ type: 'result', runId: 'run-1', status: 'ok', durationMs: 12 });
+    });
+
+    expect(await screen.findByText('Could not check lesson: checker offline')).toBeTruthy();
+  });
 });
