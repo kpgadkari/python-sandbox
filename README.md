@@ -3,6 +3,45 @@
 A home-LAN Python coding sandbox for kids. The app is hosted on an OpenMediaVault
 fileserver, but Python code runs in the browser through Pyodide/WebAssembly.
 
+## Architecture
+
+Python never runs on the server. The React app loads Pyodide (WebAssembly) in a
+Web Worker and executes the kid's code locally. Lesson grading sends stdout (and a
+code snapshot) to the API; saving projects sends source file contents only. The
+Rust backend handles auth, lesson content, and project metadata in MariaDB;
+project files live on disk under `data/projects/`.
+
+```mermaid
+flowchart TB
+  subgraph browser["Browser (home LAN)"]
+    UI["React + CodeMirror"]
+    Worker["Web Worker"]
+    Pyodide["Pyodide (Python WASM)"]
+    UI -->|"Run"| Worker
+    Worker --> Pyodide
+  end
+
+  subgraph host["Docker host (OMV)"]
+    FE["Frontend (nginx)"]
+    BE["Backend (Axum)"]
+    DB[(MariaDB)]
+    FS[("data/projects/")]
+    FE -->|"/api/*"| BE
+    BE --> DB
+    BE --> FS
+  end
+
+  UI -->|"REST /api"| FE
+  UI -->|"static assets, /pyodide"| FE
+```
+
+| Concern | Where it lives |
+| --- | --- |
+| Code execution | Browser Web Worker (Pyodide) |
+| Auth, lessons, attempts | MariaDB via backend API |
+| Saved projects | MariaDB metadata + files on disk |
+| Static UI & Pyodide bundle | Frontend container (or Vite in dev) |
+
 ## Stack
 
 - Frontend: React, Vite, TypeScript, CodeMirror 6
