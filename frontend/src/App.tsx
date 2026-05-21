@@ -30,7 +30,6 @@ type ConsoleLine = {
 
 type LessonResult = {
   passed: boolean;
-  expected: string;
 } | null;
 
 export function App() {
@@ -137,7 +136,7 @@ export function App() {
         if (lessonRef.current && event.status === 'ok') {
           try {
             const result = await api.checkLesson(lessonRef.current.id, codeRef.current, stdoutRef.current);
-            setLessonResult({ passed: result.passed, expected: result.expected_stdout });
+            setLessonResult({ passed: result.passed });
           } catch (error) {
             appendConsole('system', `Could not check lesson: ${error instanceof Error ? error.message : String(error)}\n`);
           }
@@ -529,7 +528,7 @@ export function App() {
               {lessonResult ? (
                 <div className={lessonResult.passed ? 'lesson-result passed' : 'lesson-result failed'}>
                   {lessonResult.passed ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
-                  <span>{lessonResult.passed ? 'Passed' : `Expected: ${JSON.stringify(lessonResult.expected)}`}</span>
+                  <span>{lessonResult.passed ? 'Passed' : 'Try again'}</span>
                 </div>
               ) : (
                 <p className="muted">Select a lesson and run the code to check it.</p>

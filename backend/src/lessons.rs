@@ -33,7 +33,7 @@ pub(crate) async fn get_lesson(
 ) -> Result<Json<LessonDetail>, ApiError> {
     require_user(&state, &headers).await?;
     let lesson = sqlx::query_as::<_, LessonDetail>(
-            "SELECT id, title, prompt, description, hint, difficulty, starter_code, expected_stdout FROM lessons WHERE id = ? AND is_published = 1",
+            "SELECT id, title, prompt, description, hint, difficulty, starter_code FROM lessons WHERE id = ? AND is_published = 1",
         )
         .bind(id)
         .fetch_optional(&state.db)
@@ -49,12 +49,13 @@ pub(crate) async fn check_lesson(
     Json(request): Json<CheckLessonRequest>,
 ) -> Result<Json<CheckLessonResponse>, ApiError> {
     let user = require_user(&state, &headers).await?;
-    let expected =
-        sqlx::query_scalar::<_, String>("SELECT expected_stdout FROM lessons WHERE id = ?")
-            .bind(&id)
-            .fetch_optional(&state.db)
-            .await?
-            .ok_or(ApiError::not_found("lesson not found"))?;
+    let expected = sqlx::query_scalar::<_, String>(
+        "SELECT expected_stdout FROM lessons WHERE id = ? AND is_published = 1",
+    )
+    .bind(&id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::not_found("lesson not found"))?;
     let passed = normalize_stdout(&request.stdout) == normalize_stdout(&expected);
     sqlx::query(
         "INSERT INTO attempts (id, user_id, lesson_id, code_snapshot, stdout, passed, created_at)
@@ -69,10 +70,7 @@ pub(crate) async fn check_lesson(
     .bind(Utc::now().naive_utc())
     .execute(&state.db)
     .await?;
-    Ok(Json(CheckLessonResponse {
-        passed,
-        expected_stdout: expected,
-    }))
+    Ok(Json(CheckLessonResponse { passed }))
 }
 
 fn normalize_stdout(value: &str) -> String {
