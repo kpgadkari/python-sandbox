@@ -140,9 +140,23 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
     expect(screen.queryByText('Projects')).toBeNull();
     expect(screen.getByText('Use print() to write text.')).toBeTruthy();
+    expect(screen.getByLabelText('code editor')).toHaveProperty('value', '');
+    expect(screen.queryByText('Hint: Use quotation marks.')).toBeNull();
     expect(api.listProjects).not.toHaveBeenCalled();
     expect(api.createProject).not.toHaveBeenCalled();
 
+    const hintButton = screen.getByRole('button', { name: 'Hint' });
+    fireEvent.click(hintButton);
+    expect(screen.getByLabelText('code editor')).toHaveProperty('value', 'print("hello, python")\n');
+    expect(screen.getByText('Hint: Use quotation marks.')).toBeTruthy();
+    expect(hintButton).toHaveProperty('ariaPressed', 'true');
+
+    fireEvent.click(hintButton);
+    expect(screen.queryByText('Hint: Use quotation marks.')).toBeNull();
+    expect(screen.getByLabelText('code editor')).toHaveProperty('value', '');
+    expect(hintButton).toHaveProperty('ariaPressed', 'false');
+
+    fireEvent.click(hintButton);
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
     const worker = MockWorker.latest;
     expect(worker?.posted[0]).toMatchObject({

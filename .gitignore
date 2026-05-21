@@ -9,6 +9,10 @@ backend/target/
 # Generated Pyodide assets (npm run dev/build)
 frontend/public/pyodide/
 
+# Local backup copies
+*.bak/
+*.bak
+
 # Runtime data (saved projects)
 data/*
 !data/.gitkeep
