@@ -176,6 +176,7 @@ mod tests {
             detail["hint"],
             "The text inside print() needs quotation marks."
         );
+        assert!(detail.get("expected_stdout").is_none());
 
         let check_response = app
             .oneshot(
@@ -196,11 +197,56 @@ mod tests {
         assert_eq!(check_response.status(), StatusCode::OK);
         let check = json_body(check_response).await?;
         assert_eq!(check["passed"], true);
+        assert!(check.get("expected_stdout").is_none());
 
         let attempts = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM attempts")
             .fetch_one(&state.db)
             .await?;
         assert_eq!(attempts, 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn unpublished_lessons_cannot_be_checked() -> anyhow::Result<()> {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
+        sqlx::query("UPDATE lessons SET is_published = 0 WHERE id = ?")
+            .bind("hello-python")
+            .execute(&state.db)
+            .await?;
+        let app = build_router(state.clone());
+        let cookie = login_cookie(app.clone(), "son", "python").await?;
+
+        let detail_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/lessons/hello-python")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(detail_response.status(), StatusCode::NOT_FOUND);
+
+        let check_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/lessons/hello-python/check")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "code_snapshot": "print(\"hello, python\")\n",
+                            "stdout": "hello, python\n"
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(check_response.status(), StatusCode::NOT_FOUND);
         Ok(())
     }
 

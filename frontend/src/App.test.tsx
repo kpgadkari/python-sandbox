@@ -52,7 +52,6 @@ const lessonDetail = {
   ...lessonSummary,
   hint: 'Use quotation marks.',
   starter_code: 'print("hello, python")\n',
-  expected_stdout: 'hello, python\n',
 };
 
 const project = {
@@ -94,7 +93,7 @@ function mockWorkspace(user: User = childUser) {
   vi.mocked(api.logout).mockResolvedValue(undefined);
   vi.mocked(api.listLessons).mockResolvedValue([lessonSummary]);
   vi.mocked(api.getLesson).mockResolvedValue(lessonDetail);
-  vi.mocked(api.checkLesson).mockResolvedValue({ passed: true, expected_stdout: 'hello, python\n' });
+  vi.mocked(api.checkLesson).mockResolvedValue({ passed: true });
   vi.mocked(api.listProjects).mockResolvedValue([project]);
   vi.mocked(api.getProject).mockResolvedValue(project);
   vi.mocked(api.createProject).mockResolvedValue(project);
@@ -228,7 +227,6 @@ describe('App', () => {
       ...secondLesson,
       hint: '',
       starter_code: 'name = "Ada"\nprint(name)\n',
-      expected_stdout: 'Ada\n',
     };
     const createdProject = {
       ...project,

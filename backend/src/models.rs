@@ -93,7 +93,6 @@ pub(crate) struct LessonDetail {
     pub(crate) hint: String,
     pub(crate) difficulty: String,
     pub(crate) starter_code: String,
-    pub(crate) expected_stdout: String,
 }
 
 #[derive(Deserialize)]
@@ -105,5 +104,4 @@ pub(crate) struct CheckLessonRequest {
 #[derive(Serialize)]
 pub(crate) struct CheckLessonResponse {
     pub(crate) passed: bool,
-    pub(crate) expected_stdout: String,
 }
