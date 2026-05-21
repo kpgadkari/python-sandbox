@@ -1,23 +1,5 @@
 import type { RunRequest, WorkerEvent } from '../lib/types';
-
-type PyodideInterface = {
-  FS: {
-    mkdirTree(path: string): void;
-    writeFile(path: string, contents: string): void;
-  };
-  runPython(code: string): unknown;
-  runPythonAsync(code: string): Promise<unknown>;
-  setStdin(options: { stdin: () => string }): void;
-  setStdout(options: { batched: (text: string) => void }): void;
-  setStderr(options: { batched: (text: string) => void }): void;
-};
-
-type PyodideModule = {
-  loadPyodide: (options?: { indexURL?: string }) => Promise<PyodideInterface>;
-};
-
-const PYODIDE_INDEX_URL = '/pyodide/';
-const PYODIDE_MODULE_URL = `${PYODIDE_INDEX_URL}pyodide.mjs?v=0.29.4`;
+import { loadPyodideModule, type PyodideInterface } from './pyodideLoader';
 
 let pyodideReady: Promise<PyodideInterface> | null = null;
 
@@ -39,9 +21,7 @@ function post(event: WorkerEvent) {
 
 async function getPyodide() {
   if (!pyodideReady) {
-    pyodideReady = import(/* @vite-ignore */ PYODIDE_MODULE_URL).then((module) =>
-      (module as PyodideModule).loadPyodide({ indexURL: PYODIDE_INDEX_URL }),
-    ).catch((error) => {
+    pyodideReady = loadPyodideModule().catch((error) => {
       pyodideReady = null;
       throw error;
     });
@@ -109,11 +89,7 @@ os.chdir("/home/pyodide/project")
   }
 }
 
-if (
-  typeof self !== 'undefined' &&
-  typeof WorkerGlobalScope !== 'undefined' &&
-  self instanceof WorkerGlobalScope
-) {
+export function initializeWorkerRuntime(): void {
   getPyodide()
     .then(() => post({ type: 'ready' }))
     .catch((error) => console.error(error));
@@ -123,4 +99,12 @@ if (
       void runPython(message.data);
     }
   };
+}
+
+if (
+  typeof self !== 'undefined' &&
+  typeof WorkerGlobalScope !== 'undefined' &&
+  self instanceof WorkerGlobalScope
+) {
+  initializeWorkerRuntime();
 }

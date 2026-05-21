@@ -1,10 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PyodideInterface } from './pyodideLoader';
+
+const loadPyodideModule = vi.hoisted(() => vi.fn());
+
+vi.mock('./pyodideLoader', () => ({
+  loadPyodideModule,
+}));
 
 function nextTick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-type MockPyodide = {
+type MockPyodide = PyodideInterface & {
   FS: {
     mkdirTree: ReturnType<typeof vi.fn>;
     writeFile: ReturnType<typeof vi.fn>;
@@ -18,27 +25,29 @@ type MockPyodide = {
 
 async function loadWorkerWithMocks(pyodide: MockPyodide) {
   vi.resetModules();
+  loadPyodideModule.mockResolvedValue(pyodide);
 
-  class MockWorkerScope {}
-  const postMessage = vi.fn();
-  const scope = new (MockWorkerScope as unknown as { new (): WorkerGlobalScope & { postMessage: typeof postMessage } })();
-  Object.assign(scope, { postMessage, onmessage: null });
+  const postMessage = vi.fn<(message: unknown) => void>();
+  const scope = {
+    postMessage,
+    onmessage: null as ((message: MessageEvent) => void) | null,
+  };
 
-  vi.stubGlobal('WorkerGlobalScope', MockWorkerScope);
   vi.stubGlobal('self', scope);
   vi.stubGlobal('performance', { now: () => 100 });
 
-  vi.doMock('/pyodide/pyodide.mjs?v=0.29.4', () => ({
-    loadPyodide: vi.fn().mockResolvedValue(pyodide),
-  }));
-
-  await import('./pythonWorker');
+  const { initializeWorkerRuntime } = await import('./pythonWorker');
+  initializeWorkerRuntime();
   await nextTick();
 
-  return { scope, postMessage };
+  return { scope: scope as typeof scope & { onmessage: ((message: MessageEvent) => void) | null }, postMessage };
 }
 
 describe('pythonWorker runtime', () => {
+  beforeEach(() => {
+    loadPyodideModule.mockReset();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.resetModules();
