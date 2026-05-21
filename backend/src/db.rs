@@ -43,7 +43,7 @@ async fn seed_user(
     .fetch_optional(pool)
     .await?;
     if let Some((id, existing_hash)) = exists {
-        if verify_password(password, &existing_hash)? {
+        if verify_password(password, &existing_hash) {
             sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
                 .bind(display_name)
                 .bind(role)
@@ -88,12 +88,13 @@ fn hash_password(password: &str) -> anyhow::Result<String> {
         .to_string())
 }
 
-fn verify_password(password: &str, password_hash: &str) -> anyhow::Result<bool> {
-    let parsed_hash =
-        PasswordHash::new(password_hash).map_err(|err| anyhow::anyhow!("parse password: {err}"))?;
-    Ok(Argon2::default()
+fn verify_password(password: &str, password_hash: &str) -> bool {
+    let Ok(parsed_hash) = PasswordHash::new(password_hash) else {
+        return false;
+    };
+    Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok())
+        .is_ok()
 }
 
 pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
@@ -443,8 +444,32 @@ mod tests {
                 .fetch_one(&db.pool)
                 .await?;
 
-        assert!(!verify_password("first-password", &password_hash)?);
-        assert!(verify_password("second-password", &password_hash)?);
+        assert!(!verify_password("first-password", &password_hash));
+        assert!(verify_password("second-password", &password_hash));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reseeding_existing_user_repairs_malformed_password_hash() -> anyhow::Result<()> {
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(());
+        };
+
+        seed_user(&db.pool, "learner", "fixed-password", "Learner", "child").await?;
+        sqlx::query("UPDATE users SET password_hash = ? WHERE username = ?")
+            .bind("not-a-password-hash")
+            .bind("learner")
+            .execute(&db.pool)
+            .await?;
+
+        seed_user(&db.pool, "learner", "fixed-password", "Learner", "child").await?;
+        let password_hash =
+            sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE username = ?")
+                .bind("learner")
+                .fetch_one(&db.pool)
+                .await?;
+
+        assert!(verify_password("fixed-password", &password_hash));
         Ok(())
     }
 
