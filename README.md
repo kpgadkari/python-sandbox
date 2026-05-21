@@ -6,10 +6,10 @@ fileserver, but Python code runs in the browser through Pyodide/WebAssembly.
 ## Architecture
 
 Python never runs on the server. The React app loads Pyodide (WebAssembly) in a
-Web Worker, executes the kid's code locally, and sends stdout back to the API only
-for lesson checks and project saves. The Rust backend handles auth, lesson
-content, and project metadata in MariaDB; project source files live on disk under
-`data/projects/`.
+Web Worker and executes the kid's code locally. Lesson grading sends stdout (and a
+code snapshot) to the API; saving projects sends source file contents only. The
+Rust backend handles auth, lesson content, and project metadata in MariaDB;
+project files live on disk under `data/projects/`.
 
 ```mermaid
 flowchart TB
