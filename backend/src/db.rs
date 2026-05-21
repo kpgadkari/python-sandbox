@@ -1,7 +1,7 @@
 use std::env;
 
 use argon2::{
-    password_hash::{PasswordHasher, SaltString},
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
 use chrono::Utc;
@@ -36,25 +36,35 @@ async fn seed_user(
     role: &str,
 ) -> anyhow::Result<()> {
     let username = username.trim().to_lowercase();
-    let exists = sqlx::query_scalar::<_, String>("SELECT id FROM users WHERE username = ?")
-        .bind(&username)
-        .fetch_optional(pool)
-        .await?;
-    if let Some(id) = exists {
-        sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
+    let exists = sqlx::query_as::<_, (String, String)>(
+        "SELECT id, password_hash FROM users WHERE username = ?",
+    )
+    .bind(&username)
+    .fetch_optional(pool)
+    .await?;
+    if let Some((id, existing_hash)) = exists {
+        if verify_password(password, &existing_hash)? {
+            sqlx::query("UPDATE users SET display_name = ?, role = ? WHERE id = ?")
+                .bind(display_name)
+                .bind(role)
+                .bind(id)
+                .execute(pool)
+                .await?;
+        } else {
+            sqlx::query(
+                "UPDATE users SET password_hash = ?, display_name = ?, role = ? WHERE id = ?",
+            )
+            .bind(hash_password(password)?)
             .bind(display_name)
             .bind(role)
             .bind(id)
             .execute(pool)
             .await?;
+        }
         return Ok(());
     }
 
-    let salt = SaltString::generate(&mut OsRng);
-    let password_hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|err| anyhow::anyhow!("hash password: {err}"))?
-        .to_string();
+    let password_hash = hash_password(password)?;
     sqlx::query(
         "INSERT INTO users (id, username, password_hash, display_name, role, created_at)
          VALUES (?, ?, ?, ?, ?, ?)",
@@ -68,6 +78,22 @@ async fn seed_user(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+fn hash_password(password: &str) -> anyhow::Result<String> {
+    let salt = SaltString::generate(&mut OsRng);
+    Ok(Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|err| anyhow::anyhow!("hash password: {err}"))?
+        .to_string())
+}
+
+fn verify_password(password: &str, password_hash: &str) -> anyhow::Result<bool> {
+    let parsed_hash =
+        PasswordHash::new(password_hash).map_err(|err| anyhow::anyhow!("parse password: {err}"))?;
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &parsed_hash)
+        .is_ok())
 }
 
 pub(crate) async fn seed_lessons(pool: &MySqlPool) -> anyhow::Result<()> {
@@ -399,6 +425,60 @@ mod tests {
         .await?;
         assert_eq!(count, 26);
         assert_eq!(first_title, "Hello, Python");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reseeding_existing_user_rotates_password_hash() -> anyhow::Result<()> {
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(());
+        };
+
+        seed_user(&db.pool, "learner", "first-password", "Learner", "child").await?;
+        seed_user(&db.pool, "learner", "second-password", "Learner", "child").await?;
+
+        let password_hash =
+            sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE username = ?")
+                .bind("learner")
+                .fetch_one(&db.pool)
+                .await?;
+
+        assert!(!verify_password("first-password", &password_hash)?);
+        assert!(verify_password("second-password", &password_hash)?);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reseeding_existing_user_preserves_matching_password_hash() -> anyhow::Result<()> {
+        let Some(db) = TestDb::connect().await? else {
+            return Ok(());
+        };
+
+        seed_user(&db.pool, "learner", "same-password", "Learner", "child").await?;
+        let original_hash =
+            sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE username = ?")
+                .bind("learner")
+                .fetch_one(&db.pool)
+                .await?;
+
+        seed_user(
+            &db.pool,
+            "learner",
+            "same-password",
+            "Renamed Learner",
+            "child",
+        )
+        .await?;
+        let reseeded = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT password_hash, display_name, role FROM users WHERE username = ?",
+        )
+        .bind("learner")
+        .fetch_one(&db.pool)
+        .await?;
+
+        assert_eq!(reseeded.0, original_hash);
+        assert_eq!(reseeded.1, "Renamed Learner");
+        assert_eq!(reseeded.2, "child");
         Ok(())
     }
 }

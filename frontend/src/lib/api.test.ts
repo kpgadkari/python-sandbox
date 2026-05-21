@@ -15,12 +15,11 @@ describe('api client', () => {
   });
 
   it('sends JSON requests with session credentials', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ passed: true, expected_stdout: 'ok\n' }));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ passed: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(api.checkLesson('hello-python', 'print("ok")', 'ok\n')).resolves.toEqual({
       passed: true,
-      expected_stdout: 'ok\n',
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/lessons/hello-python/check', {

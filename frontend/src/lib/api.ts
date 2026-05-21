@@ -68,7 +68,7 @@ export const api = {
     return request<LessonDetail>(`/api/lessons/${id}`);
   },
   checkLesson(id: string, codeSnapshot: string, stdout: string) {
-    return request<{ passed: boolean; expected_stdout: string }>(`/api/lessons/${id}/check`, {
+    return request<{ passed: boolean }>(`/api/lessons/${id}/check`, {
       method: 'POST',
       body: JSON.stringify({ code_snapshot: codeSnapshot, stdout }),
     });

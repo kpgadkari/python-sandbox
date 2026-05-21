@@ -27,7 +27,6 @@ export type LessonSummary = {
 export type LessonDetail = LessonSummary & {
   hint: string;
   starter_code: string;
-  expected_stdout: string;
 };
 
 export type RunRequest = {
