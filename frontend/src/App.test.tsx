@@ -140,6 +140,8 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
     expect(screen.queryByText('Projects')).toBeNull();
     expect(screen.getByText('Use print() to write text.')).toBeTruthy();
+    expect(api.listProjects).not.toHaveBeenCalled();
+    expect(api.createProject).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
     const worker = MockWorker.latest;
