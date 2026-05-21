@@ -6,6 +6,7 @@ import {
   BookOpen,
   CheckCircle2,
   FileCode2,
+  Lightbulb,
   Loader2,
   LogOut,
   Play,
@@ -49,6 +50,7 @@ export function App() {
   const [workerReady, setWorkerReady] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lessonResult, setLessonResult] = useState<LessonResult>(null);
+  const [showLessonCode, setShowLessonCode] = useState(false);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const stdoutRef = useRef('');
@@ -160,7 +162,8 @@ export function App() {
     if (lessonList.length > 0) {
       const firstLesson = await api.getLesson(lessonList[0].id);
       setLesson(firstLesson);
-      setCode(firstLesson.starter_code);
+      setShowLessonCode(false);
+      setCode(currentUser.role === 'child' ? '' : firstLesson.starter_code);
     }
 
     if (currentUser.role === 'child') {
@@ -256,9 +259,27 @@ export function App() {
   async function selectLesson(id: string) {
     const selected = await api.getLesson(id);
     setLesson(selected);
-    setCode(selected.starter_code);
+    setShowLessonCode(false);
+    setCode(user?.role === 'child' ? '' : selected.starter_code);
     setLessonResult(null);
     appendConsole('system', `Loaded lesson: ${selected.title}\n`);
+  }
+
+  function toggleLessonHint() {
+    if (!lesson) {
+      return;
+    }
+    if (showLessonCode) {
+      setShowLessonCode(false);
+      if (code === lesson.starter_code) {
+        setCode('');
+      }
+      return;
+    }
+    setShowLessonCode(true);
+    if (code.trim().length === 0) {
+      setCode(lesson.starter_code);
+    }
   }
 
   function runCode() {
@@ -283,10 +304,17 @@ export function App() {
   }
 
   function resetCode() {
-    setCode(lesson?.starter_code ?? project?.files['main.py'] ?? 'print("hello, python")\n');
+    if (user?.role === 'child' && lesson) {
+      setShowLessonCode(false);
+      setCode('');
+    } else {
+      setCode(lesson?.starter_code ?? project?.files['main.py'] ?? 'print("hello, python")\n');
+    }
     setLessonResult(null);
     setConsoleLines([]);
   }
+
+  const childLessonMode = user?.role === 'child' && lesson;
 
   if (loading) {
     return (
@@ -404,6 +432,17 @@ export function App() {
               <Square size={16} />
               Stop
             </button>
+            {childLessonMode ? (
+              <button
+                type="button"
+                className={showLessonCode ? 'toolbar-toggle active' : 'toolbar-toggle'}
+                aria-pressed={showLessonCode}
+                onClick={toggleLessonHint}
+              >
+                <Lightbulb size={16} />
+                Hint
+              </button>
+            ) : null}
             <button type="button" onClick={resetCode}>
               <RotateCcw size={16} />
               Reset
@@ -418,8 +457,15 @@ export function App() {
         </header>
 
         <div className="main-grid">
-          <section className="editor-pane">
+          <section
+            className={
+              childLessonMode && showLessonCode && lesson.hint ? 'editor-pane with-hint' : 'editor-pane'
+            }
+          >
             <div className="pane-title">main.py</div>
+            {childLessonMode && showLessonCode && lesson.hint ? (
+              <p className="editor-hint">Hint: {lesson.hint}</p>
+            ) : null}
             <CodeMirror
               value={code}
               height="100%"
@@ -439,8 +485,9 @@ export function App() {
               <section className="problem-panel">
                 <div className="pane-title">Problem</div>
                 <h3>{lesson.title}</h3>
+                <p className="problem-prompt">{lesson.prompt}</p>
                 <p>{lesson.description}</p>
-                {lesson.hint ? <p className="hint">Hint: {lesson.hint}</p> : null}
+                {!childLessonMode && lesson.hint ? <p className="hint">Hint: {lesson.hint}</p> : null}
               </section>
             ) : null}
 

@@ -153,7 +153,7 @@ mod tests {
             .await?;
         assert_eq!(list_response.status(), StatusCode::OK);
         let lessons = json_body(list_response).await?;
-        assert_eq!(lessons.as_array().expect("lesson array").len(), 12);
+        assert_eq!(lessons.as_array().expect("lesson array").len(), 26);
         assert_eq!(lessons[0]["difficulty"], "Basics");
         assert!(lessons[0]["description"]
             .as_str()
