@@ -18,6 +18,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api } from './lib/api';
+import { newRunId } from './lib/runId';
 import type { LessonDetail, LessonSummary, ProjectDetail, ProjectSummary, User, WorkerEvent } from './lib/types';
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -285,21 +286,30 @@ export function App() {
     if (runState !== 'idle') {
       return;
     }
-    const worker = ensureWorker();
-    const runId = crypto.randomUUID();
-    stdoutRef.current = '';
-    outputBytesRef.current = 0;
-    setLessonResult(null);
-    setConsoleLines([]);
-    setRunState(workerReady ? 'running' : 'loading');
 
-    worker.postMessage({
-      type: 'run',
-      runId,
-      files,
-      entrypoint: 'main.py',
-      stdin: stdin.length > 0 ? stdin.split('\n') : [],
-    });
+    try {
+      const worker = ensureWorker();
+      const runId = newRunId();
+      stdoutRef.current = '';
+      outputBytesRef.current = 0;
+      setLessonResult(null);
+      setConsoleLines([]);
+      setRunState(workerReady ? 'running' : 'loading');
+
+      worker.postMessage({
+        type: 'run',
+        runId,
+        files,
+        entrypoint: 'main.py',
+        stdin: stdin.length > 0 ? stdin.split('\n') : [],
+      });
+    } catch (error) {
+      setRunState('idle');
+      appendConsole(
+        'system',
+        `Could not start run: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
   }
 
   function resetCode() {

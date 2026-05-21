@@ -316,6 +316,28 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByLabelText('code editor')).toHaveProperty('value', 'print("second")\n'));
   });
 
+  it('starts a run when crypto.randomUUID is unavailable (plain HTTP)', async () => {
+    mockWorkspace(childUser);
+    vi.stubGlobal('crypto', {
+      getRandomValues: (target: Uint8Array) => {
+        target.fill(0xab);
+        return target;
+      },
+    });
+
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hint' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(MockWorker.latest?.posted[0]).toMatchObject({
+      type: 'run',
+      entrypoint: 'main.py',
+      files: { 'main.py': 'print("hello, python")\n' },
+    });
+  });
+
   it('prevents duplicate runs while loading and reports worker crashes', async () => {
     mockWorkspace(childUser);
 
