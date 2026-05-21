@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  frontend-and-backend-tests:
     runs-on: ubuntu-latest
 
     services:
@@ -40,10 +40,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Frontend tests
+      - name: Frontend Vitest suite (React, worker, API)
         run: |
           npm ci --prefix frontend
           npm --prefix frontend test
 
-      - name: Backend tests
+      - name: Backend Rust tests with MariaDB integration
         run: cargo test --manifest-path backend/Cargo.toml
