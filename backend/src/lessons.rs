@@ -129,24 +129,39 @@ pub(crate) async fn create_lesson(
         .take(64)
         .collect::<String>();
     let hidden_tests = request.hidden_tests.unwrap_or_else(|| "[]".into());
+    validate_hidden_tests(&hidden_tests)?;
     let is_published = request.is_published.unwrap_or(true);
+
+    let lesson = LessonManageDetail {
+        id,
+        title: request.title.trim().to_string(),
+        prompt: request.prompt.trim().to_string(),
+        description: request.description.trim().to_string(),
+        hint: request.hint.trim().to_string(),
+        difficulty,
+        starter_code: request.starter_code,
+        expected_stdout: request.expected_stdout,
+        hidden_tests,
+        is_published,
+        sort_order,
+    };
 
     sqlx::query(
         "INSERT INTO lessons (id, title, prompt, description, hint, difficulty, starter_code,
                               expected_stdout, hidden_tests, is_published, sort_order)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(&id)
-    .bind(request.title.trim())
-    .bind(request.prompt.trim())
-    .bind(request.description.trim())
-    .bind(request.hint.trim())
-    .bind(&difficulty)
-    .bind(&request.starter_code)
-    .bind(&request.expected_stdout)
-    .bind(&hidden_tests)
-    .bind(is_published)
-    .bind(sort_order)
+    .bind(&lesson.id)
+    .bind(&lesson.title)
+    .bind(&lesson.prompt)
+    .bind(&lesson.description)
+    .bind(&lesson.hint)
+    .bind(&lesson.difficulty)
+    .bind(&lesson.starter_code)
+    .bind(&lesson.expected_stdout)
+    .bind(&lesson.hidden_tests)
+    .bind(lesson.is_published)
+    .bind(lesson.sort_order)
     .execute(&state.db)
     .await
     .map_err(|err| {
@@ -158,7 +173,7 @@ pub(crate) async fn create_lesson(
         ApiError::from(err)
     })?;
 
-    get_lesson_manage(State(state), headers, AxumPath(id)).await
+    Ok(Json(lesson))
 }
 
 pub(crate) async fn update_lesson(
@@ -207,8 +222,23 @@ pub(crate) async fn update_lesson(
         .filter(|value| !value.is_empty())
         .unwrap_or(existing.expected_stdout);
     let hidden_tests = request.hidden_tests.unwrap_or(existing.hidden_tests);
+    validate_hidden_tests(&hidden_tests)?;
     let is_published = request.is_published.unwrap_or(existing.is_published);
     let sort_order = request.sort_order.unwrap_or(existing.sort_order);
+
+    let lesson = LessonManageDetail {
+        id,
+        title,
+        prompt,
+        description,
+        hint,
+        difficulty,
+        starter_code,
+        expected_stdout,
+        hidden_tests,
+        is_published,
+        sort_order,
+    };
 
     sqlx::query(
         "UPDATE lessons SET title = ?, prompt = ?, description = ?, hint = ?, difficulty = ?,
@@ -216,21 +246,21 @@ pub(crate) async fn update_lesson(
                             is_published = ?, sort_order = ?
          WHERE id = ?",
     )
-    .bind(&title)
-    .bind(&prompt)
-    .bind(&description)
-    .bind(&hint)
-    .bind(&difficulty)
-    .bind(&starter_code)
-    .bind(&expected_stdout)
-    .bind(&hidden_tests)
-    .bind(is_published)
-    .bind(sort_order)
-    .bind(&id)
+    .bind(&lesson.title)
+    .bind(&lesson.prompt)
+    .bind(&lesson.description)
+    .bind(&lesson.hint)
+    .bind(&lesson.difficulty)
+    .bind(&lesson.starter_code)
+    .bind(&lesson.expected_stdout)
+    .bind(&lesson.hidden_tests)
+    .bind(lesson.is_published)
+    .bind(lesson.sort_order)
+    .bind(&lesson.id)
     .execute(&state.db)
     .await?;
 
-    get_lesson_manage(State(state), headers, AxumPath(id)).await
+    Ok(Json(lesson))
 }
 
 pub(crate) async fn check_lesson(
@@ -283,6 +313,13 @@ fn clean_lesson_id(raw: &str) -> Result<String, ApiError> {
     Ok(id)
 }
 
+fn validate_hidden_tests(raw: &str) -> Result<(), ApiError> {
+    match serde_json::from_str::<serde_json::Value>(raw) {
+        Ok(serde_json::Value::Array(_)) => Ok(()),
+        _ => Err(ApiError::bad_request("hidden_tests must be a JSON array")),
+    }
+}
+
 fn normalize_stdout(value: &str) -> String {
     value.replace("\r\n", "\n").trim_end().to_string()
 }
@@ -303,5 +340,13 @@ mod tests {
         assert_eq!(clean_lesson_id("hello-python").unwrap(), "hello-python");
         assert!(clean_lesson_id("").is_err());
         assert!(clean_lesson_id("Bad ID").is_err());
+    }
+
+    #[test]
+    fn validates_hidden_tests() {
+        assert!(validate_hidden_tests("[]").is_ok());
+        assert!(validate_hidden_tests(r#"[{"in": "1"}]"#).is_ok());
+        assert!(validate_hidden_tests("{}").is_err());
+        assert!(validate_hidden_tests("not json").is_err());
     }
 }

@@ -169,6 +169,7 @@ pub(crate) struct SubmissionSummary {
     pub(crate) submitter_name: String,
     pub(crate) status: String,
     pub(crate) note: String,
+    pub(crate) parent_feedback: Option<String>,
     pub(crate) created_at: String,
     pub(crate) reviewed_at: Option<String>,
 }

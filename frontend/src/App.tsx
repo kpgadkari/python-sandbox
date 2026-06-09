@@ -65,10 +65,10 @@ export function App() {
   const [showLessonCode, setShowLessonCode] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
-  const [lessonEditorId, setLessonEditorId] = useState<string | null | false>(false);
+  const [lessonEditorOpen, setLessonEditorOpen] = useState(false);
+  const [lessonEditorId, setLessonEditorId] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [parentView, setParentView] = useState<'workspace' | 'reviews'>('workspace');
-  const [childFeedback, setChildFeedback] = useState<string | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const stdoutRef = useRef('');
@@ -324,7 +324,7 @@ export function App() {
     }
   }
 
-  async function refreshLessons() {
+  const refreshLessons = useCallback(async () => {
     if (!user) {
       return;
     }
@@ -334,7 +334,7 @@ export function App() {
       const refreshed = await api.getLesson(lesson.id);
       setLesson(refreshed);
     }
-  }
+  }, [user, lesson]);
 
   function toggleLessonHint() {
     if (!lesson) {
@@ -400,17 +400,10 @@ export function App() {
       ? submissions.find((item) => item.lesson_id === lesson.id)
       : null;
   const pendingReviewCount = submissions.filter((item) => item.status === 'pending').length;
-
-  useEffect(() => {
-    if (!latestChildSubmission || latestChildSubmission.status === 'pending') {
-      setChildFeedback(null);
-      return;
-    }
-    api
-      .getSubmission(latestChildSubmission.id)
-      .then((submission) => setChildFeedback(submission.parent_feedback))
-      .catch(() => setChildFeedback(null));
-  }, [latestChildSubmission]);
+  const childFeedback =
+    latestChildSubmission && latestChildSubmission.status !== 'pending'
+      ? latestChildSubmission.parent_feedback
+      : null;
 
   if (loading) {
     return (
@@ -498,7 +491,10 @@ export function App() {
                     type="button"
                     aria-label="Edit lesson"
                     disabled={!lesson}
-                    onClick={() => setLessonEditorId(lesson?.id ?? null)}
+                    onClick={() => {
+                      setLessonEditorId(lesson?.id ?? null);
+                      setLessonEditorOpen(true);
+                    }}
                   >
                     <Pencil size={16} />
                   </button>
@@ -506,7 +502,10 @@ export function App() {
                     className="icon-button"
                     type="button"
                     aria-label="New lesson"
-                    onClick={() => setLessonEditorId(null)}
+                    onClick={() => {
+                      setLessonEditorId(null);
+                      setLessonEditorOpen(true);
+                    }}
                   >
                     <Plus size={16} />
                   </button>
@@ -710,10 +709,10 @@ export function App() {
         )}
       </section>
 
-      {lessonEditorId !== false ? (
+      {lessonEditorOpen ? (
         <LessonEditor
           lessonId={lessonEditorId}
-          onClose={() => setLessonEditorId(false)}
+          onClose={() => setLessonEditorOpen(false)}
           onSaved={() => void refreshLessons()}
         />
       ) : null}

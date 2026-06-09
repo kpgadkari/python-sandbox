@@ -23,7 +23,7 @@ pub(crate) async fn list_submissions(
     let rows = if user.role == "parent" {
         sqlx::query_as::<_, SubmissionSummary>(
             "SELECT s.id, s.lesson_id, l.title AS lesson_title, u.display_name AS submitter_name,
-                    s.status, s.note,
+                    s.status, s.note, s.parent_feedback,
                     DATE_FORMAT(s.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
                     DATE_FORMAT(s.reviewed_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS reviewed_at
              FROM submissions s
@@ -36,7 +36,7 @@ pub(crate) async fn list_submissions(
     } else {
         sqlx::query_as::<_, SubmissionSummary>(
             "SELECT s.id, s.lesson_id, l.title AS lesson_title, u.display_name AS submitter_name,
-                    s.status, s.note,
+                    s.status, s.note, s.parent_feedback,
                     DATE_FORMAT(s.created_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS created_at,
                     DATE_FORMAT(s.reviewed_at, '%Y-%m-%dT%H:%i:%s.%fZ') AS reviewed_at
              FROM submissions s

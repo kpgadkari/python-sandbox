@@ -43,6 +43,7 @@ export type SubmissionSummary = {
   submitter_name: string;
   status: 'pending' | 'reviewed' | 'needs_work';
   note: string;
+  parent_feedback: string | null;
   created_at: string;
   reviewed_at: string | null;
 };
@@ -50,7 +51,6 @@ export type SubmissionSummary = {
 export type SubmissionDetail = SubmissionSummary & {
   code_snapshot: string;
   stdout: string;
-  parent_feedback: string | null;
 };
 
 export type CreateLessonPayload = {

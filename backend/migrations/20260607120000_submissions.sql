@@ -5,7 +5,7 @@ CREATE TABLE submissions (
     code_snapshot MEDIUMTEXT NOT NULL,
     stdout MEDIUMTEXT NOT NULL,
     note TEXT NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    status ENUM('pending', 'reviewed', 'needs_work') NOT NULL DEFAULT 'pending',
     parent_feedback TEXT NULL,
     created_at DATETIME(6) NOT NULL,
     reviewed_at DATETIME(6) NULL,
