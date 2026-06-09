@@ -29,6 +29,58 @@ export type LessonDetail = LessonSummary & {
   starter_code: string;
 };
 
+export type LessonManageDetail = LessonDetail & {
+  expected_stdout: string;
+  hidden_tests: string;
+  is_published: boolean;
+  sort_order: number;
+};
+
+export type SubmissionSummary = {
+  id: string;
+  lesson_id: string;
+  lesson_title: string;
+  submitter_name: string;
+  status: 'pending' | 'reviewed' | 'needs_work';
+  note: string;
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+export type SubmissionDetail = SubmissionSummary & {
+  code_snapshot: string;
+  stdout: string;
+  parent_feedback: string | null;
+};
+
+export type CreateLessonPayload = {
+  id: string;
+  title: string;
+  prompt: string;
+  description: string;
+  hint: string;
+  difficulty?: string;
+  starter_code: string;
+  expected_stdout: string;
+  hidden_tests?: string;
+  is_published?: boolean;
+  sort_order?: number;
+};
+
+export type UpdateLessonPayload = Partial<Omit<CreateLessonPayload, 'id'>>;
+
+export type CreateSubmissionPayload = {
+  lesson_id: string;
+  code_snapshot: string;
+  stdout: string;
+  note?: string;
+};
+
+export type ReviewSubmissionPayload = {
+  feedback: string;
+  status: 'reviewed' | 'needs_work';
+};
+
 export type RunRequest = {
   type: 'run';
   runId: string;

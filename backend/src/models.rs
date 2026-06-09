@@ -105,3 +105,99 @@ pub(crate) struct CheckLessonRequest {
 pub(crate) struct CheckLessonResponse {
     pub(crate) passed: bool,
 }
+
+#[derive(FromRow, Serialize)]
+pub(crate) struct LessonManageSummary {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) prompt: String,
+    pub(crate) description: String,
+    pub(crate) difficulty: String,
+    pub(crate) is_published: bool,
+    pub(crate) sort_order: i32,
+}
+
+#[derive(FromRow, Serialize)]
+pub(crate) struct LessonManageDetail {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) prompt: String,
+    pub(crate) description: String,
+    pub(crate) hint: String,
+    pub(crate) difficulty: String,
+    pub(crate) starter_code: String,
+    pub(crate) expected_stdout: String,
+    pub(crate) hidden_tests: String,
+    pub(crate) is_published: bool,
+    pub(crate) sort_order: i32,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CreateLessonRequest {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) prompt: String,
+    pub(crate) description: String,
+    pub(crate) hint: String,
+    pub(crate) difficulty: Option<String>,
+    pub(crate) starter_code: String,
+    pub(crate) expected_stdout: String,
+    pub(crate) hidden_tests: Option<String>,
+    pub(crate) is_published: Option<bool>,
+    pub(crate) sort_order: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct UpdateLessonRequest {
+    pub(crate) title: Option<String>,
+    pub(crate) prompt: Option<String>,
+    pub(crate) description: Option<String>,
+    pub(crate) hint: Option<String>,
+    pub(crate) difficulty: Option<String>,
+    pub(crate) starter_code: Option<String>,
+    pub(crate) expected_stdout: Option<String>,
+    pub(crate) hidden_tests: Option<String>,
+    pub(crate) is_published: Option<bool>,
+    pub(crate) sort_order: Option<i32>,
+}
+
+#[derive(FromRow, Serialize)]
+pub(crate) struct SubmissionSummary {
+    pub(crate) id: String,
+    pub(crate) lesson_id: String,
+    pub(crate) lesson_title: String,
+    pub(crate) submitter_name: String,
+    pub(crate) status: String,
+    pub(crate) note: String,
+    pub(crate) created_at: String,
+    pub(crate) reviewed_at: Option<String>,
+}
+
+#[derive(FromRow, Serialize)]
+pub(crate) struct SubmissionDetail {
+    pub(crate) id: String,
+    pub(crate) lesson_id: String,
+    pub(crate) lesson_title: String,
+    pub(crate) submitter_name: String,
+    pub(crate) status: String,
+    pub(crate) note: String,
+    pub(crate) code_snapshot: String,
+    pub(crate) stdout: String,
+    pub(crate) parent_feedback: Option<String>,
+    pub(crate) created_at: String,
+    pub(crate) reviewed_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CreateSubmissionRequest {
+    pub(crate) lesson_id: String,
+    pub(crate) code_snapshot: String,
+    pub(crate) stdout: String,
+    pub(crate) note: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ReviewSubmissionRequest {
+    pub(crate) feedback: String,
+    pub(crate) status: String,
+}

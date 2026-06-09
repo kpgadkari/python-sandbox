@@ -12,6 +12,7 @@ mod project_files;
 mod projects;
 mod routes;
 mod state;
+mod submissions;
 #[cfg(test)]
 mod test_db;
 

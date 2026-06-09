@@ -7,10 +7,14 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{
     auth::{login, logout, me},
     error::ApiError,
-    lessons::{check_lesson, get_lesson, list_lessons},
+    lessons::{
+        check_lesson, create_lesson, get_lesson, get_lesson_manage, list_lessons,
+        list_lessons_manage, update_lesson,
+    },
     models::HealthResponse,
     projects::{create_project, delete_project, get_project, list_projects, save_project_files},
     state::AppState,
+    submissions::{create_submission, get_submission, list_submissions, review_submission},
 };
 
 pub(crate) fn build_router(state: AppState) -> Router {
@@ -22,9 +26,17 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/api/projects", get(list_projects).post(create_project))
         .route("/api/projects/:id", get(get_project).delete(delete_project))
         .route("/api/projects/:id/files", put(save_project_files))
-        .route("/api/lessons", get(list_lessons))
-        .route("/api/lessons/:id", get(get_lesson))
+        .route("/api/lessons", get(list_lessons).post(create_lesson))
+        .route("/api/lessons/manage", get(list_lessons_manage))
+        .route("/api/lessons/:id", get(get_lesson).put(update_lesson))
+        .route("/api/lessons/:id/manage", get(get_lesson_manage))
         .route("/api/lessons/:id/check", post(check_lesson))
+        .route(
+            "/api/submissions",
+            get(list_submissions).post(create_submission),
+        )
+        .route("/api/submissions/:id", get(get_submission))
+        .route("/api/submissions/:id/review", put(review_submission))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)

@@ -23,6 +23,13 @@ vi.mock('./lib/api', () => ({
     listLessons: vi.fn(),
     getLesson: vi.fn(),
     checkLesson: vi.fn(),
+    getLessonManage: vi.fn(),
+    createLesson: vi.fn(),
+    updateLesson: vi.fn(),
+    listSubmissions: vi.fn(),
+    getSubmission: vi.fn(),
+    createSubmission: vi.fn(),
+    reviewSubmission: vi.fn(),
   },
 }));
 
@@ -94,6 +101,33 @@ function mockWorkspace(user: User = childUser) {
   vi.mocked(api.listLessons).mockResolvedValue([lessonSummary]);
   vi.mocked(api.getLesson).mockResolvedValue(lessonDetail);
   vi.mocked(api.checkLesson).mockResolvedValue({ passed: true });
+  vi.mocked(api.listSubmissions).mockResolvedValue([]);
+  vi.mocked(api.getSubmission).mockResolvedValue({
+    id: 'sub-1',
+    lesson_id: 'hello-python',
+    lesson_title: 'Hello, Python',
+    submitter_name: 'Young Coder',
+    status: 'pending',
+    note: '',
+    created_at: '2026-01-01T00:00:00Z',
+    reviewed_at: null,
+    code_snapshot: 'print("hello, python")\n',
+    stdout: 'hello, python\n',
+    parent_feedback: null,
+  });
+  vi.mocked(api.createSubmission).mockResolvedValue({
+    id: 'sub-1',
+    lesson_id: 'hello-python',
+    lesson_title: 'Hello, Python',
+    submitter_name: 'Young Coder',
+    status: 'pending',
+    note: '',
+    created_at: '2026-01-01T00:00:00Z',
+    reviewed_at: null,
+    code_snapshot: 'print("hello, python")\n',
+    stdout: 'hello, python\n',
+    parent_feedback: null,
+  });
   vi.mocked(api.listProjects).mockResolvedValue([project]);
   vi.mocked(api.getProject).mockResolvedValue(project);
   vi.mocked(api.createProject).mockResolvedValue(project);

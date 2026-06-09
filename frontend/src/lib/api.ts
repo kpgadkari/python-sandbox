@@ -1,4 +1,17 @@
-import type { LessonDetail, LessonSummary, ProjectDetail, ProjectSummary, User } from './types';
+import type {
+  CreateLessonPayload,
+  CreateSubmissionPayload,
+  LessonDetail,
+  LessonManageDetail,
+  LessonSummary,
+  ProjectDetail,
+  ProjectSummary,
+  ReviewSubmissionPayload,
+  SubmissionDetail,
+  SubmissionSummary,
+  UpdateLessonPayload,
+  User,
+} from './types';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -71,6 +84,39 @@ export const api = {
     return request<{ passed: boolean }>(`/api/lessons/${id}/check`, {
       method: 'POST',
       body: JSON.stringify({ code_snapshot: codeSnapshot, stdout }),
+    });
+  },
+  getLessonManage(id: string) {
+    return request<LessonManageDetail>(`/api/lessons/${id}/manage`);
+  },
+  createLesson(payload: CreateLessonPayload) {
+    return request<LessonManageDetail>('/api/lessons', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  updateLesson(id: string, payload: UpdateLessonPayload) {
+    return request<LessonManageDetail>(`/api/lessons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  listSubmissions() {
+    return request<SubmissionSummary[]>('/api/submissions');
+  },
+  getSubmission(id: string) {
+    return request<SubmissionDetail>(`/api/submissions/${id}`);
+  },
+  createSubmission(payload: CreateSubmissionPayload) {
+    return request<SubmissionDetail>('/api/submissions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  reviewSubmission(id: string, payload: ReviewSubmissionPayload) {
+    return request<SubmissionDetail>(`/api/submissions/${id}/review`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   },
 };
