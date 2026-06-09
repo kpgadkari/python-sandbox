@@ -178,7 +178,9 @@ export function App() {
     const items = await api.listSubmissions();
     setSubmissions(items);
     if (currentUser.role === 'parent') {
-      setSelectedSubmissionId((current) => current ?? items[0]?.id ?? null);
+      setSelectedSubmissionId((current) =>
+        current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
+      );
     }
   }, []);
 

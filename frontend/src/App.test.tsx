@@ -69,6 +69,24 @@ const project = {
   files: { 'main.py': 'print("from project")\n' },
 };
 
+const submission = {
+  id: 'sub-1',
+  lesson_id: 'hello-python',
+  lesson_title: 'Hello, Python',
+  submitter_name: 'Young Coder',
+  status: 'pending' as const,
+  note: '',
+  parent_feedback: null,
+  created_at: '2026-01-01T00:00:00Z',
+  reviewed_at: null,
+};
+
+const submissionDetail = {
+  ...submission,
+  code_snapshot: 'print("hello, python")\n',
+  stdout: 'hello, python\n',
+};
+
 class MockWorker {
   static latest: MockWorker | null = null;
 
@@ -102,31 +120,27 @@ function mockWorkspace(user: User = childUser) {
   vi.mocked(api.getLesson).mockResolvedValue(lessonDetail);
   vi.mocked(api.checkLesson).mockResolvedValue({ passed: true });
   vi.mocked(api.listSubmissions).mockResolvedValue([]);
-  vi.mocked(api.getSubmission).mockResolvedValue({
-    id: 'sub-1',
-    lesson_id: 'hello-python',
-    lesson_title: 'Hello, Python',
-    submitter_name: 'Young Coder',
-    status: 'pending',
-    note: '',
-    created_at: '2026-01-01T00:00:00Z',
-    reviewed_at: null,
-    code_snapshot: 'print("hello, python")\n',
-    stdout: 'hello, python\n',
-    parent_feedback: null,
+  vi.mocked(api.getSubmission).mockResolvedValue(submissionDetail);
+  vi.mocked(api.createSubmission).mockResolvedValue(submissionDetail);
+  vi.mocked(api.reviewSubmission).mockResolvedValue({
+    ...submissionDetail,
+    status: 'reviewed',
+    parent_feedback: 'Nice work',
+    reviewed_at: '2026-01-01T00:01:00Z',
   });
-  vi.mocked(api.createSubmission).mockResolvedValue({
-    id: 'sub-1',
-    lesson_id: 'hello-python',
-    lesson_title: 'Hello, Python',
-    submitter_name: 'Young Coder',
-    status: 'pending',
-    note: '',
-    created_at: '2026-01-01T00:00:00Z',
-    reviewed_at: null,
-    code_snapshot: 'print("hello, python")\n',
-    stdout: 'hello, python\n',
-    parent_feedback: null,
+  vi.mocked(api.createLesson).mockResolvedValue({
+    ...lessonDetail,
+    expected_stdout: 'hello, python\n',
+    hidden_tests: '[]',
+    is_published: true,
+    sort_order: 27,
+  });
+  vi.mocked(api.updateLesson).mockResolvedValue({
+    ...lessonDetail,
+    expected_stdout: 'hello, python\n',
+    hidden_tests: '[]',
+    is_published: true,
+    sort_order: 1,
   });
   vi.mocked(api.listProjects).mockResolvedValue([project]);
   vi.mocked(api.getProject).mockResolvedValue(project);
@@ -407,5 +421,79 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Could not check lesson: checker offline')).toBeTruthy();
+  });
+
+  it('lets child users send the current lesson code for review', async () => {
+    mockWorkspace(childUser);
+    vi.mocked(api.listSubmissions).mockResolvedValueOnce([]).mockResolvedValueOnce([submission]);
+
+    render(<App />);
+    expect(await screen.findByRole('heading', { name: 'Hello, Python', level: 2 })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('code editor'), {
+      target: { value: 'print("submitted")\n' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send for review' }));
+
+    await waitFor(() =>
+      expect(api.createSubmission).toHaveBeenCalledWith({
+        lesson_id: 'hello-python',
+        code_snapshot: 'print("submitted")\n',
+        stdout: '',
+      }),
+    );
+    expect(await screen.findByText('Sent to parent for review.')).toBeTruthy();
+    expect(await screen.findByText('Review: pending')).toBeTruthy();
+  });
+
+  it('lets parents review submissions from the inbox', async () => {
+    mockWorkspace(parentUser);
+    vi.mocked(api.listSubmissions).mockResolvedValue([submission]);
+
+    render(<App />);
+    expect(await screen.findByText('Projects')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View submissions' }));
+    expect(await screen.findByText('Code Reviews')).toBeTruthy();
+    await waitFor(() => expect(api.getSubmission).toHaveBeenCalledWith('sub-1'));
+    expect(await screen.findByText('print("hello, python")')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Feedback'), { target: { value: 'Nice work' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Mark reviewed' }));
+
+    await waitFor(() =>
+      expect(api.reviewSubmission).toHaveBeenCalledWith('sub-1', {
+        feedback: 'Nice work',
+        status: 'reviewed',
+      }),
+    );
+  });
+
+  it('lets parents create lessons from the lesson editor', async () => {
+    mockWorkspace(parentUser);
+
+    render(<App />);
+    expect(await screen.findByText('Projects')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New lesson' }));
+    expect(await screen.findByRole('dialog', { name: 'New Lesson' })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Lesson ID'), { target: { value: 'new-lesson' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'New Lesson' } });
+    fireEvent.change(screen.getByLabelText('Prompt'), { target: { value: 'Print something new.' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Practice output.' } });
+    fireEvent.change(screen.getByLabelText('Expected output'), { target: { value: 'hello\n' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Lesson' }));
+
+    await waitFor(() =>
+      expect(api.createLesson).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'new-lesson',
+          title: 'New Lesson',
+          prompt: 'Print something new.',
+          expected_stdout: 'hello\n',
+        }),
+      ),
+    );
   });
 });

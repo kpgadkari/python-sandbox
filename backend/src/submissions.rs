@@ -64,7 +64,7 @@ pub(crate) async fn create_submission(
         return Err(ApiError::bad_request("lesson_id is required"));
     }
     if request.code_snapshot.trim().is_empty() {
-        return Err(ApiError::bad_request("code is required"));
+        return Err(ApiError::bad_request("code_snapshot is required"));
     }
     let lesson_exists = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM lessons WHERE id = ? AND is_published = 1",
@@ -121,9 +121,16 @@ pub(crate) async fn review_submission(
     require_parent(&user)?;
     let status = request.status.trim();
     if status != "reviewed" && status != "needs_work" {
-        return Err(ApiError::bad_request("status must be reviewed or needs_work"));
+        return Err(ApiError::bad_request(
+            "status must be reviewed or needs_work",
+        ));
     }
-    let feedback = request.feedback.trim().chars().take(2000).collect::<String>();
+    let feedback = request
+        .feedback
+        .trim()
+        .chars()
+        .take(2000)
+        .collect::<String>();
     let now = Utc::now().naive_utc();
     let updated = sqlx::query(
         "UPDATE submissions SET status = ?, parent_feedback = ?, reviewed_at = ? WHERE id = ?",
@@ -175,5 +182,6 @@ async fn get_submission_detail(
         .fetch_optional(&state.db)
         .await?
     };
-    row.map(Json).ok_or_else(|| ApiError::not_found("submission not found"))
+    row.map(Json)
+        .ok_or_else(|| ApiError::not_found("submission not found"))
 }

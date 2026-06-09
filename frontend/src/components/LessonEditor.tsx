@@ -33,6 +33,7 @@ export function LessonEditor({ lessonId, onClose, onSaved }: LessonEditorProps) 
     if (!lessonId) {
       setForm(emptyForm);
       setLoading(false);
+      setError('');
       return;
     }
 

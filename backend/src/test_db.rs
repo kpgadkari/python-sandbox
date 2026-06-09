@@ -50,12 +50,17 @@ fn test_database_url() -> anyhow::Result<Option<String>> {
 }
 
 async fn reset_database(pool: &MySqlPool) -> anyhow::Result<()> {
-    sqlx::query("SET FOREIGN_KEY_CHECKS = 0").execute(pool).await?;
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 0")
+        .execute(pool)
+        .await?;
     sqlx::query("DELETE FROM attempts").execute(pool).await?;
+    sqlx::query("DELETE FROM submissions").execute(pool).await?;
     sqlx::query("DELETE FROM sessions").execute(pool).await?;
     sqlx::query("DELETE FROM projects").execute(pool).await?;
     sqlx::query("DELETE FROM lessons").execute(pool).await?;
     sqlx::query("DELETE FROM users").execute(pool).await?;
-    sqlx::query("SET FOREIGN_KEY_CHECKS = 1").execute(pool).await?;
+    sqlx::query("SET FOREIGN_KEY_CHECKS = 1")
+        .execute(pool)
+        .await?;
     Ok(())
 }

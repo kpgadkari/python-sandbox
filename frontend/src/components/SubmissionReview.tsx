@@ -18,9 +18,13 @@ export function SubmissionReview({ submissions, selectedId, onSelect, onReviewed
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let active = true;
+
     if (!selectedId) {
       setDetail(null);
       setFeedback('');
+      setLoading(false);
+      setError('');
       return;
     }
 
@@ -29,13 +33,27 @@ export function SubmissionReview({ submissions, selectedId, onSelect, onReviewed
     api
       .getSubmission(selectedId)
       .then((submission) => {
+        if (!active) {
+          return;
+        }
         setDetail(submission);
         setFeedback(submission.parent_feedback ?? '');
       })
       .catch((err: unknown) => {
+        if (!active) {
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Could not load submission');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
   }, [selectedId]);
 
   async function submitReview(status: 'reviewed' | 'needs_work') {
