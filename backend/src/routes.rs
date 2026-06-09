@@ -7,10 +7,14 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{
     auth::{login, logout, me},
     error::ApiError,
-    lessons::{check_lesson, get_lesson, list_lessons},
+    lessons::{
+        check_lesson, create_lesson, get_lesson, get_lesson_manage, list_lessons,
+        list_lessons_manage, update_lesson,
+    },
     models::HealthResponse,
     projects::{create_project, delete_project, get_project, list_projects, save_project_files},
     state::AppState,
+    submissions::{create_submission, get_submission, list_submissions, review_submission},
 };
 
 pub(crate) fn build_router(state: AppState) -> Router {
@@ -22,9 +26,17 @@ pub(crate) fn build_router(state: AppState) -> Router {
         .route("/api/projects", get(list_projects).post(create_project))
         .route("/api/projects/:id", get(get_project).delete(delete_project))
         .route("/api/projects/:id/files", put(save_project_files))
-        .route("/api/lessons", get(list_lessons))
-        .route("/api/lessons/:id", get(get_lesson))
+        .route("/api/lessons", get(list_lessons).post(create_lesson))
+        .route("/api/lessons/manage", get(list_lessons_manage))
+        .route("/api/lessons/:id", get(get_lesson).put(update_lesson))
+        .route("/api/lessons/:id/manage", get(get_lesson_manage))
         .route("/api/lessons/:id/check", post(check_lesson))
+        .route(
+            "/api/submissions",
+            get(list_submissions).post(create_submission),
+        )
+        .route("/api/submissions/:id", get(get_submission))
+        .route("/api/submissions/:id/review", put(review_submission))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(state)
@@ -247,6 +259,251 @@ mod tests {
             )
             .await?;
         assert_eq!(check_response.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn lesson_management_routes_require_parent_and_update_lessons() -> anyhow::Result<()> {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
+        let app = build_router(state);
+        let parent_cookie = login_cookie(app.clone(), "parent", "change-me").await?;
+        let child_cookie = login_cookie(app.clone(), "son", "python").await?;
+
+        let child_manage_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/lessons/manage")
+                    .header(header::COOKIE, &child_cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(child_manage_response.status(), StatusCode::FORBIDDEN);
+
+        let child_create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/lessons")
+                    .header(header::COOKIE, &child_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "id": "child-lesson",
+                            "title": "Child Lesson",
+                            "prompt": "Print from child.",
+                            "description": "Should be forbidden.",
+                            "hint": "",
+                            "starter_code": "print(\"nope\")\n",
+                            "expected_stdout": "nope\n"
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(child_create_response.status(), StatusCode::FORBIDDEN);
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/lessons")
+                    .header(header::COOKIE, &parent_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "id": "new-lesson",
+                            "title": "New Lesson",
+                            "prompt": "Print something new.",
+                            "description": "Practice output.",
+                            "hint": "Use print().",
+                            "difficulty": "Basics",
+                            "starter_code": "print(\"new\")\n",
+                            "expected_stdout": "new\n",
+                            "hidden_tests": "[]",
+                            "is_published": true,
+                            "sort_order": 99
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(create_response.status(), StatusCode::OK);
+        let created = json_body(create_response).await?;
+        assert_eq!(created["id"], "new-lesson");
+        assert_eq!(created["expected_stdout"], "new\n");
+
+        let manage_detail_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/lessons/new-lesson/manage")
+                    .header(header::COOKIE, &parent_cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(manage_detail_response.status(), StatusCode::OK);
+        assert_eq!(
+            json_body(manage_detail_response).await?["hidden_tests"],
+            "[]"
+        );
+
+        let update_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri("/api/lessons/new-lesson")
+                    .header(header::COOKIE, &parent_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "title": "Updated Lesson",
+                            "is_published": false
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(update_response.status(), StatusCode::OK);
+        let updated = json_body(update_response).await?;
+        assert_eq!(updated["title"], "Updated Lesson");
+        assert_eq!(updated["is_published"], false);
+
+        let child_detail_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/lessons/new-lesson")
+                    .header(header::COOKIE, &child_cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(child_detail_response.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn submission_routes_allow_child_submit_and_parent_review() -> anyhow::Result<()> {
+        let Some((state, _temp_dir, _db)) = test_state().await? else {
+            return Ok(());
+        };
+        let app = build_router(state);
+        let parent_cookie = login_cookie(app.clone(), "parent", "change-me").await?;
+        let child_cookie = login_cookie(app.clone(), "son", "python").await?;
+
+        let parent_create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/submissions")
+                    .header(header::COOKIE, &parent_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "lesson_id": "hello-python",
+                            "code_snapshot": "print(\"parent\")\n",
+                            "stdout": "parent\n"
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(parent_create_response.status(), StatusCode::FORBIDDEN);
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/submissions")
+                    .header(header::COOKIE, &child_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "lesson_id": "hello-python",
+                            "code_snapshot": "print(\"hello, python\")\n",
+                            "stdout": "hello, python\n",
+                            "note": "Ready for review"
+                        })
+                        .to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(create_response.status(), StatusCode::OK);
+        let created = json_body(create_response).await?;
+        let submission_id = created["id"].as_str().expect("submission id");
+        assert_eq!(created["status"], "pending");
+
+        let parent_list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/submissions")
+                    .header(header::COOKIE, &parent_cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(parent_list_response.status(), StatusCode::OK);
+        let parent_list = json_body(parent_list_response).await?;
+        assert_eq!(parent_list.as_array().expect("submission array").len(), 1);
+        assert_eq!(parent_list[0]["parent_feedback"], Value::Null);
+
+        let child_review_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri(format!("/api/submissions/{submission_id}/review"))
+                    .header(header::COOKIE, &child_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "feedback": "Looks good", "status": "reviewed" }).to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(child_review_response.status(), StatusCode::FORBIDDEN);
+
+        let review_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PUT)
+                    .uri(format!("/api/submissions/{submission_id}/review"))
+                    .header(header::COOKIE, &parent_cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "feedback": "Nice work", "status": "reviewed" }).to_string(),
+                    ))?,
+            )
+            .await?;
+        assert_eq!(review_response.status(), StatusCode::OK);
+        let reviewed = json_body(review_response).await?;
+        assert_eq!(reviewed["status"], "reviewed");
+        assert_eq!(reviewed["parent_feedback"], "Nice work");
+
+        let child_get_response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(format!("/api/submissions/{submission_id}"))
+                    .header(header::COOKIE, &child_cookie)
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(child_get_response.status(), StatusCode::OK);
+        assert_eq!(
+            json_body(child_get_response).await?["parent_feedback"],
+            "Nice work"
+        );
         Ok(())
     }
 

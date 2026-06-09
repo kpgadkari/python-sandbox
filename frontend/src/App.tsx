@@ -9,17 +9,29 @@ import {
   Lightbulb,
   Loader2,
   LogOut,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
   Save,
+  Send,
   Square,
   Terminal,
   XCircle,
 } from 'lucide-react';
 import { api } from './lib/api';
 import { newRunId } from './lib/runId';
-import type { LessonDetail, LessonSummary, ProjectDetail, ProjectSummary, User, WorkerEvent } from './lib/types';
+import { LessonEditor } from './components/LessonEditor';
+import { SubmissionReview } from './components/SubmissionReview';
+import type {
+  LessonDetail,
+  LessonSummary,
+  ProjectDetail,
+  ProjectSummary,
+  SubmissionSummary,
+  User,
+  WorkerEvent,
+} from './lib/types';
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const RUN_TIMEOUT_MS = 5000;
@@ -51,6 +63,12 @@ export function App() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lessonResult, setLessonResult] = useState<LessonResult>(null);
   const [showLessonCode, setShowLessonCode] = useState(false);
+  const [submissions, setSubmissions] = useState<SubmissionSummary[]>([]);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [lessonEditorOpen, setLessonEditorOpen] = useState(false);
+  const [lessonEditorId, setLessonEditorId] = useState<string | null>(null);
+  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [parentView, setParentView] = useState<'workspace' | 'reviews'>('workspace');
   const workerRef = useRef<Worker | null>(null);
   const timeoutRef = useRef<number | null>(null);
   const stdoutRef = useRef('');
@@ -156,6 +174,16 @@ export function App() {
     return worker;
   }, [appendConsole, stopWorker]);
 
+  const loadSubmissions = useCallback(async (currentUser: User) => {
+    const items = await api.listSubmissions();
+    setSubmissions(items);
+    if (currentUser.role === 'parent') {
+      setSelectedSubmissionId((current) =>
+        current && items.some((item) => item.id === current) ? current : items[0]?.id ?? null,
+      );
+    }
+  }, []);
+
   const loadWorkspace = useCallback(async (currentUser: User) => {
     const lessonList = await api.listLessons();
     setLessons(lessonList);
@@ -165,6 +193,8 @@ export function App() {
       setShowLessonCode(false);
       setCode(currentUser.role === 'child' ? '' : firstLesson.starter_code);
     }
+
+    await loadSubmissions(currentUser);
 
     if (currentUser.role === 'child') {
       setProjects([]);
@@ -184,7 +214,7 @@ export function App() {
       setCode(created.files['main.py'] ?? '');
       setProjects(await api.listProjects());
     }
-  }, []);
+  }, [loadSubmissions]);
 
   useEffect(() => {
     api
@@ -221,6 +251,9 @@ export function App() {
     setProjects([]);
     setLessons([]);
     setLesson(null);
+    setSubmissions([]);
+    setSelectedSubmissionId(null);
+    setParentView('workspace');
   }
 
   function chooseLogin(username: string, password: string) {
@@ -264,6 +297,46 @@ export function App() {
     setLessonResult(null);
     appendConsole('system', `Loaded lesson: ${selected.title}\n`);
   }
+
+  async function submitForReview() {
+    if (!lesson || !user || user.role !== 'child') {
+      return;
+    }
+    if (code.trim().length === 0) {
+      appendConsole('system', 'Write some code before sending for review.\n');
+      return;
+    }
+    setSubmitState('sending');
+    try {
+      await api.createSubmission({
+        lesson_id: lesson.id,
+        code_snapshot: code,
+        stdout: stdoutRef.current,
+      });
+      setSubmitState('sent');
+      await loadSubmissions(user);
+      appendConsole('system', 'Sent to parent for review.\n');
+      window.setTimeout(() => setSubmitState('idle'), 2000);
+    } catch (error) {
+      setSubmitState('idle');
+      appendConsole(
+        'system',
+        `Could not submit: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
+  }
+
+  const refreshLessons = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+    const lessonList = await api.listLessons();
+    setLessons(lessonList);
+    if (lesson?.id) {
+      const refreshed = await api.getLesson(lesson.id);
+      setLesson(refreshed);
+    }
+  }, [user, lesson]);
 
   function toggleLessonHint() {
     if (!lesson) {
@@ -324,6 +397,15 @@ export function App() {
   }
 
   const childLessonMode = user?.role === 'child' && lesson;
+  const latestChildSubmission =
+    user?.role === 'child' && lesson
+      ? submissions.find((item) => item.lesson_id === lesson.id)
+      : null;
+  const pendingReviewCount = submissions.filter((item) => item.status === 'pending').length;
+  const childFeedback =
+    latestChildSubmission && latestChildSubmission.status !== 'pending'
+      ? latestChildSubmission.parent_feedback
+      : null;
 
   if (loading) {
     return (
@@ -403,7 +485,37 @@ export function App() {
         <section className="sidebar-section">
           <div className="section-title">
             <span>Lessons</span>
-            <BookOpen size={16} />
+            <div className="section-actions">
+              {user.role === 'parent' ? (
+                <>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label="Edit lesson"
+                    disabled={!lesson}
+                    onClick={() => {
+                      setLessonEditorId(lesson?.id ?? null);
+                      setLessonEditorOpen(true);
+                    }}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label="New lesson"
+                    onClick={() => {
+                      setLessonEditorId(null);
+                      setLessonEditorOpen(true);
+                    }}
+                  >
+                    <Plus size={16} />
+                  </button>
+                </>
+              ) : (
+                <BookOpen size={16} />
+              )}
+            </div>
           </div>
           <div className="list">
             {lessons.map((item) => (
@@ -420,6 +532,29 @@ export function App() {
           </div>
         </section>
 
+        {user.role === 'parent' ? (
+          <section className="sidebar-section">
+            <div className="section-title">
+              <span>Reviews</span>
+              {pendingReviewCount > 0 ? <span className="badge">{pendingReviewCount}</span> : null}
+            </div>
+            <button
+              type="button"
+              className={parentView === 'reviews' ? 'list-item active' : 'list-item'}
+              onClick={() => setParentView('reviews')}
+            >
+              View submissions
+            </button>
+            <button
+              type="button"
+              className={parentView === 'workspace' ? 'list-item active' : 'list-item'}
+              onClick={() => setParentView('workspace')}
+            >
+              Back to workspace
+            </button>
+          </section>
+        ) : null}
+
         <button className="logout-button" type="button" onClick={() => void handleLogout()}>
           <LogOut size={16} />
           Sign out
@@ -427,6 +562,15 @@ export function App() {
       </aside>
 
       <section className="workspace">
+        {user.role === 'parent' && parentView === 'reviews' ? (
+          <SubmissionReview
+            submissions={submissions}
+            selectedId={selectedSubmissionId}
+            onSelect={setSelectedSubmissionId}
+            onReviewed={() => void loadSubmissions(user)}
+          />
+        ) : (
+          <>
         <header className="topbar">
           <div>
             <h2>{user.role === 'child' ? lesson?.title ?? 'Lesson' : project?.title ?? 'Untitled Project'}</h2>
@@ -450,6 +594,12 @@ export function App() {
               >
                 <Lightbulb size={16} />
                 Hint
+              </button>
+            ) : null}
+            {childLessonMode ? (
+              <button type="button" onClick={() => void submitForReview()} disabled={submitState === 'sending'}>
+                {submitState === 'sending' ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
+                {submitState === 'sent' ? 'Sent' : 'Send for review'}
               </button>
             ) : null}
             <button type="button" onClick={resetCode}>
@@ -543,10 +693,31 @@ export function App() {
               ) : (
                 <p className="muted">Select a lesson and run the code to check it.</p>
               )}
+              {latestChildSubmission ? (
+                <div className={`submission-status ${latestChildSubmission.status}`}>
+                  <strong>Review: {latestChildSubmission.status.replace('_', ' ')}</strong>
+                  {latestChildSubmission.reviewed_at ? (
+                    <span>Updated {new Date(latestChildSubmission.reviewed_at).toLocaleString()}</span>
+                  ) : (
+                    <span>Waiting for parent review</span>
+                  )}
+                  {childFeedback ? <p className="review-note">Feedback: {childFeedback}</p> : null}
+                </div>
+              ) : null}
             </section>
           </aside>
         </div>
+          </>
+        )}
       </section>
+
+      {lessonEditorOpen ? (
+        <LessonEditor
+          lessonId={lessonEditorId}
+          onClose={() => setLessonEditorOpen(false)}
+          onSaved={() => void refreshLessons()}
+        />
+      ) : null}
     </main>
   );
 }

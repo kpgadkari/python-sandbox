@@ -139,3 +139,19 @@ fn random_token() -> String {
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+
+pub(crate) fn require_parent(user: &PublicUser) -> Result<(), ApiError> {
+    if user.role == "parent" {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden("parent access required"))
+    }
+}
+
+pub(crate) fn require_child(user: &PublicUser) -> Result<(), ApiError> {
+    if user.role == "child" {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden("child access required"))
+    }
+}

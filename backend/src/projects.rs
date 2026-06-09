@@ -9,9 +9,9 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
-    auth::require_user,
+    auth::{require_parent, require_user},
     error::ApiError,
-    models::{CreateProjectRequest, ProjectDetail, ProjectSummary, PublicUser, SaveFilesRequest},
+    models::{CreateProjectRequest, ProjectDetail, ProjectSummary, SaveFilesRequest},
     project_files::{read_project_files, validate_files, write_project_files},
     state::AppState,
 };
@@ -162,14 +162,6 @@ async fn project_for_owner(
     .fetch_optional(&state.db)
     .await?
     .ok_or(ApiError::not_found("project not found"))
-}
-
-fn require_parent(user: &PublicUser) -> Result<(), ApiError> {
-    if user.role == "parent" {
-        Ok(())
-    } else {
-        Err(ApiError::forbidden("projects require parent access"))
-    }
 }
 
 fn clean_title(title: Option<String>) -> String {
